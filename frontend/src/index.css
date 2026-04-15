@@ -112,6 +112,13 @@ body {
   line-height: 1.4;
 }
 
+.sidebar__invite {
+  display: inline-block;
+  margin-top: 0.5rem;
+  color: #fff;
+  text-decoration: none;
+}
+
 .main {
   padding: 1.75rem 2rem 2.5rem;
   overflow: auto;

@@ -47,6 +47,12 @@ export default function App() {
 
         <footer className="sidebar__foot">
           <p>Frontend stack: React + Vite + Recharts</p>
+          <a
+            className="nav-btn sidebar__invite"
+            href="mailto:?subject=Join%20FarmWise%20AI&body=You%20are%20invited%20to%20collaborate%20on%20FarmWise%20AI."
+          >
+            Invite
+          </a>
         </footer>
       </aside>
 
