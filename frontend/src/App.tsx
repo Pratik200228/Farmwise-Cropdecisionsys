@@ -22,17 +22,27 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { key: "overview", label: "Overview", hint: "Today's snapshot", icon: "▦" },
+  { key: "overview", label: "Overview", hint: "All 3 agents", icon: "▦" },
   {
     key: "suitability",
     label: "Crop Suitability",
-    hint: "AI agent",
+    hint: "Agent 1 · goal-based",
     icon: "✦",
   },
-  { key: "market", label: "Market Prices", hint: "API", icon: "$" },
-  { key: "health", label: "Crop Health", hint: "API", icon: "✚" },
-  { key: "multi", label: "Season Plan", hint: "3 agents", icon: "⋈" },
-  { key: "advisor", label: "Ask FarmWise", hint: "Chat", icon: "◐" },
+  {
+    key: "market",
+    label: "Market Intelligence",
+    hint: "Agent 2 · utility-based",
+    icon: "$",
+  },
+  {
+    key: "health",
+    label: "Crop Health",
+    hint: "Agent 3 · model-based",
+    icon: "✚",
+  },
+  { key: "multi", label: "Season Plan", hint: "Orchestrator", icon: "⋈" },
+  { key: "advisor", label: "Ask FarmWise", hint: "Conversational", icon: "◐" },
 ];
 
 export default function App() {
@@ -76,8 +86,8 @@ export default function App() {
             <span>Demo mode · mock APIs</span>
           </div>
           <p>
-            1 AI agent (Suitability) + 2 APIs (Market, Health) + a 3-agent
-            season plan and farmer chat.
+            Three AI agents — Suitability, Market Intelligence, Crop Health —
+            plus an orchestrator that runs them together as a season plan.
           </p>
         </footer>
       </aside>

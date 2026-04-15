@@ -75,8 +75,9 @@ export function OverviewDashboard({ onNavigate }: Props) {
           <div className="page-head__kicker">Today</div>
           <h1 className="page-head__title">Farm overview</h1>
           <p className="page-head__sub">
-            A single snapshot that combines the Crop Suitability AI agent with
-            the Market and Health APIs. Tap a card to drill in.
+            Three FarmWise agents in one snapshot — Crop Suitability (what to
+            plant), Market Intelligence (when to sell), and Crop Health (what
+            to scout). Tap any card to open its agent.
           </p>
         </div>
       </header>
@@ -97,7 +98,7 @@ export function OverviewDashboard({ onNavigate }: Props) {
           className="card overview-card overview-card--suit"
           onClick={() => onNavigate?.("suitability")}
         >
-          <div className="overview-card__kicker">AI agent · Suitability</div>
+          <div className="overview-card__kicker">Agent 1 · Suitability</div>
           <div className="overview-card__big">
             {suit?.crops[0]?.name ?? "—"}
           </div>
@@ -121,7 +122,7 @@ export function OverviewDashboard({ onNavigate }: Props) {
           className="card overview-card overview-card--market"
           onClick={() => onNavigate?.("market")}
         >
-          <div className="overview-card__kicker">API · Market</div>
+          <div className="overview-card__kicker">Agent 2 · Market</div>
           <div className="overview-card__big">
             {market ? `${market.currentPrice}` : "—"}
             <span className="overview-card__unit">
@@ -154,7 +155,7 @@ export function OverviewDashboard({ onNavigate }: Props) {
           className="card overview-card overview-card--health"
           onClick={() => onNavigate?.("health")}
         >
-          <div className="overview-card__kicker">API · Health</div>
+          <div className="overview-card__kicker">Agent 3 · Health</div>
           <div className="overview-card__big">
             {health ? `${health.healthScore}` : "—"}
             <span className="overview-card__unit">/100</span>

@@ -3,6 +3,7 @@ import { runCropSuitabilityAgent } from "../lib/insightsApi";
 import type { FarmContext } from "../types/farm";
 import { defaultFarmContext } from "../types/farm";
 import type { CropSuitability, SuitabilityReport } from "../types/insights";
+import { AgentBadge } from "./AgentBadge";
 import { EnvironmentForm } from "./EnvironmentForm";
 import { FarmContextForm } from "./FarmContextForm";
 import { RichText } from "./RichText";
@@ -102,13 +103,19 @@ export function CropSuitabilityAgentPanel() {
     <div className="suit-page">
       <header className="page-head">
         <div>
-          <div className="page-head__kicker">AI agent</div>
-          <h1 className="page-head__title">Crop Suitability</h1>
+          <div className="page-head__kicker">Agent 1 of 3 · AI agent</div>
+          <h1 className="page-head__title">Crop Suitability Agent</h1>
           <p className="page-head__sub">
             Goal-based agent — ranks crops by how well they fit the current
             weather, soil and season. Tune the inputs on the right and re-run
             any time.
           </p>
+          <AgentBadge
+            accent="suit"
+            name="Agent 1 · Crop Suitability"
+            type="goal-based"
+            role="Maximizes expected yield by matching crop requirements to environmental inputs."
+          />
         </div>
         <button
           type="button"

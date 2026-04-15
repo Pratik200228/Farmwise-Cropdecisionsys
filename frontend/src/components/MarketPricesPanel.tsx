@@ -11,6 +11,7 @@ import {
 } from "recharts";
 import { fetchMarketForecast, supportedMarketCrops } from "../lib/insightsApi";
 import type { MarketReport, SellingWindow } from "../types/insights";
+import { AgentBadge } from "./AgentBadge";
 import { RichText } from "./RichText";
 
 function confidenceLabel(c: SellingWindow["confidence"]): string {
@@ -63,12 +64,19 @@ export function MarketPricesPanel() {
     <div className="market-page">
       <header className="page-head">
         <div>
-          <div className="page-head__kicker">API integration</div>
-          <h1 className="page-head__title">Market Prices</h1>
+          <div className="page-head__kicker">Agent 2 of 3 · AI agent</div>
+          <h1 className="page-head__title">Market Intelligence Agent</h1>
           <p className="page-head__sub">
-            Price forecasts and optimal sell windows, powered by agricultural
-            pricing APIs (USDA AMS / regional exchanges).
+            Utility-based agent — blends USDA / commodity-API price history
+            with seasonal models to recommend the sell windows that maximize
+            farmer margin.
           </p>
+          <AgentBadge
+            accent="market"
+            name="Agent 2 · Market Intelligence"
+            type="utility-based"
+            role="Maximizes expected profit by ranking sell windows against a seasonal median."
+          />
         </div>
 
         <label className="crop-select">

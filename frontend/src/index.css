@@ -792,6 +792,56 @@ body {
   font-size: 0.8rem;
 }
 
+.agent-badge {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.65rem 0.85rem;
+  margin-top: 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--stroke);
+  background: var(--surface);
+  box-shadow: 0 1px 0 rgba(27, 67, 50, 0.04);
+  max-width: 56rem;
+  border-left-width: 4px;
+}
+
+.agent-badge--suit {
+  border-left-color: #2d6a4f;
+}
+.agent-badge--market {
+  border-left-color: #bc6c25;
+}
+.agent-badge--health {
+  border-left-color: #457b9d;
+}
+.agent-badge--multi {
+  border-left-color: #6a4c93;
+}
+.agent-badge--chat {
+  border-left-color: #444;
+}
+
+.agent-badge__kicker {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  font-weight: 700;
+}
+
+.agent-badge__type {
+  font-family: var(--font-display);
+  font-size: 1rem;
+  color: var(--text);
+}
+
+.agent-badge__role {
+  font-size: 0.82rem;
+  color: var(--muted);
+  line-height: 1.45;
+}
+
 .panel-error {
   margin: 0 0 1rem;
   padding: 0.65rem 0.9rem;
