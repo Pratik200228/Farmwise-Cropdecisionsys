@@ -1,12 +1,34 @@
 import { useState } from "react";
-import { DashboardPanel } from "./components/DashboardPanel";
+import { CropHealthPanel } from "./components/CropHealthPanel";
+import { CropSuitabilityAgentPanel } from "./components/CropSuitabilityAgentPanel";
 import { FarmAdvisorPanel } from "./components/FarmAdvisorPanel";
-import { MultiAgentPlanPanel } from "./components/MultiAgentPlanPanel";
+import { MarketPricesPanel } from "./components/MarketPricesPanel";
+import { OverviewDashboard } from "./components/OverviewDashboard";
 
-type NavKey = "advisor" | "multi" | "dashboard";
+type NavKey = "overview" | "suitability" | "market" | "health" | "advisor";
+
+type NavItem = {
+  key: NavKey;
+  label: string;
+  hint: string;
+  icon: string;
+};
+
+const NAV: NavItem[] = [
+  { key: "overview", label: "Overview", hint: "Today's snapshot", icon: "▦" },
+  {
+    key: "suitability",
+    label: "Crop Suitability",
+    hint: "AI agent",
+    icon: "✦",
+  },
+  { key: "market", label: "Market Prices", hint: "API", icon: "$" },
+  { key: "health", label: "Crop Health", hint: "API", icon: "✚" },
+  { key: "advisor", label: "Ask FarmWise", hint: "Chat", icon: "◐" },
+];
 
 export default function App() {
-  const [nav, setNav] = useState<NavKey>("advisor");
+  const [nav, setNav] = useState<NavKey>("overview");
 
   return (
     <div className="app-shell">
@@ -17,46 +39,52 @@ export default function App() {
           </span>
           <div>
             <div className="sidebar__name">FarmWise AI</div>
-            <div className="sidebar__tag">Crop decisions</div>
+            <div className="sidebar__tag">Decisions for small farms</div>
           </div>
         </div>
 
-        <nav className="sidebar__nav">
-          <button
-            type="button"
-            className={`nav-btn ${nav === "advisor" ? "nav-btn--active" : ""}`}
-            onClick={() => setNav("advisor")}
-          >
-            AI advisor
-          </button>
-          <button
-            type="button"
-            className={`nav-btn ${nav === "multi" ? "nav-btn--active" : ""}`}
-            onClick={() => setNav("multi")}
-          >
-            3-agent plan
-          </button>
-          <button
-            type="button"
-            className={`nav-btn ${nav === "dashboard" ? "nav-btn--active" : ""}`}
-            onClick={() => setNav("dashboard")}
-          >
-            Dashboard
-          </button>
+        <nav className="sidebar__nav" aria-label="Primary">
+          {NAV.map((item) => (
+            <button
+              key={item.key}
+              type="button"
+              className={`nav-btn ${nav === item.key ? "nav-btn--active" : ""}`}
+              onClick={() => setNav(item.key)}
+            >
+              <span className="nav-btn__icon" aria-hidden>
+                {item.icon}
+              </span>
+              <span className="nav-btn__text">
+                <span className="nav-btn__label">{item.label}</span>
+                <span className="nav-btn__hint">{item.hint}</span>
+              </span>
+            </button>
+          ))}
         </nav>
 
         <footer className="sidebar__foot">
-          <p>Frontend stack: React + Vite + Recharts</p>
+          <div className="sidebar__status">
+            <span className="sidebar__dot" aria-hidden />
+            <span>Demo mode · mock APIs</span>
+          </div>
+          <p>
+            1 AI agent (Suitability) + 2 APIs (Market, Health) + a farmer-facing
+            chat.
+          </p>
         </footer>
       </aside>
 
       <main className="main">
-        {nav === "advisor" ? (
-          <FarmAdvisorPanel />
-        ) : nav === "multi" ? (
-          <MultiAgentPlanPanel />
+        {nav === "overview" ? (
+          <OverviewDashboard onNavigate={(k) => setNav(k)} />
+        ) : nav === "suitability" ? (
+          <CropSuitabilityAgentPanel />
+        ) : nav === "market" ? (
+          <MarketPricesPanel />
+        ) : nav === "health" ? (
+          <CropHealthPanel />
         ) : (
-          <DashboardPanel />
+          <FarmAdvisorPanel />
         )}
       </main>
     </div>
