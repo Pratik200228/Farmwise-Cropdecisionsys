@@ -3,9 +3,16 @@ import { CropHealthPanel } from "./components/CropHealthPanel";
 import { CropSuitabilityAgentPanel } from "./components/CropSuitabilityAgentPanel";
 import { FarmAdvisorPanel } from "./components/FarmAdvisorPanel";
 import { MarketPricesPanel } from "./components/MarketPricesPanel";
+import { MultiAgentPlanPanel } from "./components/MultiAgentPlanPanel";
 import { OverviewDashboard } from "./components/OverviewDashboard";
 
-type NavKey = "overview" | "suitability" | "market" | "health" | "advisor";
+type NavKey =
+  | "overview"
+  | "suitability"
+  | "market"
+  | "health"
+  | "multi"
+  | "advisor";
 
 type NavItem = {
   key: NavKey;
@@ -24,6 +31,7 @@ const NAV: NavItem[] = [
   },
   { key: "market", label: "Market Prices", hint: "API", icon: "$" },
   { key: "health", label: "Crop Health", hint: "API", icon: "✚" },
+  { key: "multi", label: "Season Plan", hint: "3 agents", icon: "⋈" },
   { key: "advisor", label: "Ask FarmWise", hint: "Chat", icon: "◐" },
 ];
 
@@ -68,8 +76,8 @@ export default function App() {
             <span>Demo mode · mock APIs</span>
           </div>
           <p>
-            1 AI agent (Suitability) + 2 APIs (Market, Health) + a farmer-facing
-            chat.
+            1 AI agent (Suitability) + 2 APIs (Market, Health) + a 3-agent
+            season plan and farmer chat.
           </p>
         </footer>
       </aside>
@@ -83,6 +91,8 @@ export default function App() {
           <MarketPricesPanel />
         ) : nav === "health" ? (
           <CropHealthPanel />
+        ) : nav === "multi" ? (
+          <MultiAgentPlanPanel />
         ) : (
           <FarmAdvisorPanel />
         )}
