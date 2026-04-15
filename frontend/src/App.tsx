@@ -51,11 +51,10 @@ export default function App() {
             className="nav-btn sidebar__invite"
             href="mailto:?subject=Join%20FarmWise%20AI&body=You%20are%20invited%20to%20collaborate%20on%20FarmWise%20AI."
             aria-label="Invite collaborators to FarmWise AI via email"
-            target="_blank"
-            rel="noopener noreferrer"
           >
             Invite
           </a>
+          <p className="sidebar__invite-hint">Opens email app — add recipient(s).</p>
         </footer>
       </aside>
 
