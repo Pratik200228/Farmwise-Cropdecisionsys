@@ -108,19 +108,18 @@ export function CropHealthPanel() {
     <div className="health-page">
       <header className="page-head">
         <div>
-          <div className="page-head__kicker">Agent 3 of 3 · AI agent</div>
-          <h1 className="page-head__title">Crop Health Agent</h1>
+          <div className="page-head__kicker">External API service</div>
+          <h1 className="page-head__title">Crop Health Monitoring</h1>
           <p className="page-head__sub">
-            Model-based reflex agent — reads symptom descriptions (and later
-            images via PlantVillage / Plantix) to classify likely diseases,
-            pests, and nutrient issues with treatment steps you can act on
-            today.
+            Monitoring service for disease, pest, nutrient, and water stress
+            signals. Symptom notes work now, and the same workflow is ready for
+            image-based tools such as PlantVillage or Plantix later.
           </p>
           <AgentBadge
             accent="health"
-            name="Agent 3 · Crop Health"
-            type="model-based"
-            role="Identifies crop stress from symptoms and percepts, then recommends scouting and treatment."
+            name="Crop Health API"
+            type="api-service"
+            role="Translates symptom evidence into likely health issues and scouting steps."
           />
         </div>
       </header>

@@ -9,36 +9,20 @@ import type {
   SellingWindow,
   SuitabilityReport,
 } from "../types/insights";
+import { buildApiUrl, isMockAiEnabled } from "./runtimeConfig";
 
 /* -------------------------------------------------------------------------- */
 /*  Shared helpers                                                            */
 /* -------------------------------------------------------------------------- */
 
-const PATHS = {
+export const PATHS = {
   suitability: "/api/v1/agents/suitability/analyze",
   market: "/api/v1/market/forecast",
   health: "/api/v1/health/monitoring",
 } as const;
 
-function apiBase(): string {
-  const raw = import.meta.env.VITE_API_BASE_URL;
-  if (raw && raw.length > 0) return raw.replace(/\/$/, "");
-  return "";
-}
-
-function useMock(): boolean {
-  // default to mock when the var is unset — keeps the UI demo-able out of the box
-  const v = import.meta.env.VITE_USE_MOCK_AI;
-  return v === undefined || v === "" || v === "true";
-}
-
-function url(path: string): string {
-  const base = apiBase();
-  return base ? `${base}${path}` : path;
-}
-
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(url(path), {
+  const res = await fetch(buildApiUrl(path), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -303,7 +287,7 @@ function mockSuitability(context: FarmContext): SuitabilityReport {
 export async function runCropSuitabilityAgent(
   context: FarmContext,
 ): Promise<SuitabilityReport> {
-  if (useMock()) {
+  if (isMockAiEnabled()) {
     await delay(650);
     return mockSuitability(context);
   }
@@ -416,7 +400,7 @@ function mockMarket(crop: string): MarketReport {
 }
 
 export async function fetchMarketForecast(crop: string): Promise<MarketReport> {
-  if (useMock()) {
+  if (isMockAiEnabled()) {
     await delay(450);
     return mockMarket(crop);
   }
@@ -623,7 +607,7 @@ export async function runHealthMonitoring(
   growthStage: string,
   symptomsNote: string,
 ): Promise<HealthReport> {
-  if (useMock()) {
+  if (isMockAiEnabled()) {
     await delay(550);
     return mockHealth(crop, growthStage, symptomsNote);
   }

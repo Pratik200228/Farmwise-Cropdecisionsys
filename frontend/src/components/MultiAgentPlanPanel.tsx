@@ -64,12 +64,11 @@ export function MultiAgentPlanPanel() {
   return (
     <div className="multi-agent">
       <header className="multi-agent__head">
-        <h1 className="multi-agent__title">Multi-agent season plan</h1>
+        <h1 className="multi-agent__title">Integrated season plan</h1>
         <p className="multi-agent__sub">
-          One complex task — <strong>three AI agent types</strong>: suitability
-          (environment), market (prices & timing), and health (scouting &
-          risks). Agent 1 selects the focus crop; agents 2 and 3 run together on
-          that crop.
+          One integrated task built from the project plan: run the crop
+          suitability AI agent first, then combine market pricing and crop
+          health services around the top crop recommendation.
         </p>
       </header>
 
@@ -92,7 +91,7 @@ export function MultiAgentPlanPanel() {
             disabled={running}
             onClick={() => void run()}
           >
-            {running ? "Running three agents…" : "Run full three-agent analysis"}
+            {running ? "Running integrated analysis…" : "Run integrated analysis"}
           </button>
           {error ? (
             <p className="multi-agent__error" role="alert">
@@ -112,19 +111,17 @@ export function MultiAgentPlanPanel() {
                     : [
                         {
                           kind: "suitability",
-                          label:
-                            "Agent 1 — Crop suitability (environment & soil)",
+                          label: "Crop Suitability AI Agent",
                           status: "idle",
                         },
                         {
                           kind: "market",
-                          label:
-                            "Agent 2 — Market intelligence (price & timing)",
+                          label: "Market Price Service",
                           status: "idle",
                         },
                         {
                           kind: "health",
-                          label: "Agent 3 — Crop health (scouting & risk)",
+                          label: "Crop Health Service",
                           status: "idle",
                         },
                       ]
@@ -139,14 +136,14 @@ export function MultiAgentPlanPanel() {
                 <h2 className="multi-agent__h2">Integrated summary</h2>
                 <RichText text={plan.integratedSummary} />
                 <p className="multi-agent__focus">
-                  Focus crop from suitability agent:{" "}
+                  Focus crop from suitability analysis:{" "}
                   <strong>{plan.focusCrop}</strong>
                 </p>
               </div>
 
               <div className="agent-cards">
                 <section className="card agent-card agent-card--suit">
-                  <h3 className="agent-card__title">Suitability agent</h3>
+                  <h3 className="agent-card__title">Crop suitability AI agent</h3>
                   <RichText text={plan.suitability.environmentalSummary} />
                   <ul className="agent-card__list">
                     {plan.suitability.rankedCrops.map((c) => (
@@ -158,7 +155,7 @@ export function MultiAgentPlanPanel() {
                 </section>
 
                 <section className="card agent-card agent-card--market">
-                  <h3 className="agent-card__title">Market agent</h3>
+                  <h3 className="agent-card__title">Market price service</h3>
                   <RichText text={plan.market.outlook} />
                   <p className="agent-card__muted">{plan.market.riskNotes}</p>
                   <ul className="agent-card__list">
@@ -169,7 +166,7 @@ export function MultiAgentPlanPanel() {
                 </section>
 
                 <section className="card agent-card agent-card--health">
-                  <h3 className="agent-card__title">Health agent</h3>
+                  <h3 className="agent-card__title">Crop health service</h3>
                   <ul className="agent-card__list agent-card__list--rich">
                     {plan.health.scoutingPlan.map((w, i) => (
                       <li key={i}>
@@ -192,19 +189,19 @@ export function MultiAgentPlanPanel() {
       </div>
 
       <footer className="multi-agent__api card dev-hint">
-        <h3 className="dev-hint__title">Backend contract (three routes)</h3>
+        <h3 className="dev-hint__title">Backend contract</h3>
         <ul className="dev-hint__list">
           <li>
             <code>POST /api/v1/agents/suitability/analyze</code> — body:{" "}
             <code>{"{ context, candidateCrops? }"}</code>
           </li>
           <li>
-            <code>POST /api/v1/agents/market/forecast</code> — body:{" "}
-            <code>{"{ context, cropFocus, suitabilityTopScore? }"}</code>
+            <code>POST /api/v1/market/forecast</code> — body:{" "}
+            <code>{"{ crop }"}</code>
           </li>
           <li>
-            <code>POST /api/v1/agents/health/monitoring-plan</code> — body:{" "}
-            <code>{"{ context, cropFocus, symptomsNote? }"}</code>
+            <code>POST /api/v1/health/monitoring</code> — body:{" "}
+            <code>{"{ crop, growthStage, symptomsNote }"}</code>
           </li>
         </ul>
       </footer>

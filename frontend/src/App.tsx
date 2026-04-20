@@ -5,6 +5,7 @@ import { FarmAdvisorPanel } from "./components/FarmAdvisorPanel";
 import { MarketPricesPanel } from "./components/MarketPricesPanel";
 import { MultiAgentPlanPanel } from "./components/MultiAgentPlanPanel";
 import { OverviewDashboard } from "./components/OverviewDashboard";
+import { isMockAiEnabled } from "./lib/runtimeConfig";
 
 type NavKey =
   | "overview"
@@ -22,31 +23,32 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { key: "overview", label: "Overview", hint: "All 3 agents", icon: "▦" },
+  { key: "overview", label: "Overview", hint: "Agent + services", icon: "▦" },
   {
     key: "suitability",
     label: "Crop Suitability",
-    hint: "Agent 1 · goal-based",
+    hint: "AI agent",
     icon: "✦",
   },
   {
     key: "market",
     label: "Market Intelligence",
-    hint: "Agent 2 · utility-based",
+    hint: "API service",
     icon: "$",
   },
   {
     key: "health",
     label: "Crop Health",
-    hint: "Agent 3 · model-based",
+    hint: "API service",
     icon: "✚",
   },
-  { key: "multi", label: "Season Plan", hint: "Orchestrator", icon: "⋈" },
-  { key: "advisor", label: "Ask FarmWise", hint: "Conversational", icon: "◐" },
+  { key: "multi", label: "Season Plan", hint: "Integrated workflow", icon: "⋈" },
+  { key: "advisor", label: "Ask FarmWise", hint: "Assistant", icon: "◐" },
 ];
 
 export default function App() {
   const [nav, setNav] = useState<NavKey>("overview");
+  const mockMode = isMockAiEnabled();
 
   return (
     <div className="app-shell">
@@ -83,11 +85,11 @@ export default function App() {
         <footer className="sidebar__foot">
           <div className="sidebar__status">
             <span className="sidebar__dot" aria-hidden />
-            <span>Demo mode · mock APIs</span>
+            <span>{mockMode ? "Demo mode · browser mocks" : "Backend mode · FastAPI"}</span>
           </div>
           <p>
-            Three AI agents — Suitability, Market Intelligence, Crop Health —
-            plus an orchestrator that runs them together as a season plan.
+            One crop-suitability AI agent plus market and crop-health services,
+            coordinated through a single dashboard.
           </p>
         </footer>
       </aside>

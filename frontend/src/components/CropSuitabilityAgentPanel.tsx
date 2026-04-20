@@ -103,7 +103,7 @@ export function CropSuitabilityAgentPanel() {
     <div className="suit-page">
       <header className="page-head">
         <div>
-          <div className="page-head__kicker">Agent 1 of 3 · AI agent</div>
+          <div className="page-head__kicker">FarmWise AI agent</div>
           <h1 className="page-head__title">Crop Suitability Agent</h1>
           <p className="page-head__sub">
             Goal-based agent — ranks crops by how well they fit the current
