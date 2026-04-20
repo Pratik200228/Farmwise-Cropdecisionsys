@@ -1,157 +1,57 @@
 # 🌾 FarmWise AI
 
-> An AI-Powered Crop Decision Support System for Small-Scale Farmers
+**An AI-Powered Crop Decision Support System for Small-Scale Farmers**
 
-Small and family farmers make high-stakes decisions every day — which crops to plant, when to sell, whether that yellowing leaf is a disease or just stress. FarmWise AI brings intelligent, affordable decision support directly to the farmers who need it most, no outside consultant required.
+## Overview
 
----
-
-## What It Does
-
-FarmWise AI combines three tightly integrated capabilities into a single visual dashboard:
-
-**Crop Suitability Analysis** — A goal-based AI agent analyzes real-time environmental parameters (temperature, wind speed, humidity, rainfall, and soil conditions) and ranks crops by suitability score, complete with confidence levels and seasonal rotation suggestions.
-
-**Market Price Prediction** — Live integrations with USDA Agricultural Marketing Service and commodity market APIs surface price forecasts, historical comparisons, and optimal selling windows so farmers stop guessing and start planning.
-
-**Crop Health Monitoring** — PlantVillage and Plantix APIs power early-warning disease detection, pest identification, and growth-stage tracking before problems become losses.
-
----
+FarmWise AI helps small and family farmers make better crop selection decisions using one AI-driven crop suitability workflow plus market price and crop-health services, all through a simple visual dashboard.
 
 ## Architecture
 
-```
-┌─────────────────────────────────────────────────────┐
-│                  React.js Dashboard                 │
-│          (Chart.js / Recharts Visualizations)       │
-└───────────────────────┬─────────────────────────────┘
-                        │
-              Python + FastAPI Backend
-                        │
-        ┌───────────────┼──────────────────┐
-        ▼               ▼                  ▼
-  Crop Suitability   Market Price      Crop Health
-    AI Agent         Prediction        Monitoring
-  (LLM API +        (USDA / AMS       (PlantVillage /
-  OpenWeatherMap +   Commodity APIs)   Plantix APIs)
-  NASA Soil Data)
-```
-
-The AI agent handles complex environmental reasoning. External APIs handle market and health data. Clear separation, reliable results.
-
----
+- **Crop Suitability AI Agent** - Analyzes temperature, wind speed, humidity, rainfall, and soil conditions to rank crops by suitability score.
+- **Market Price Service** - Exposes price forecasts and selling-window guidance through the FastAPI backend.
+- **Crop Health Monitoring Service** - Returns health status, likely issues, and scouting guidance through the FastAPI backend.
 
 ## Tech Stack
 
-| Layer | Technology |
-|---|---|
-| Frontend | React.js + Recharts / Chart.js |
-| Backend | Python + FastAPI |
-| AI Agent | LLM API (OpenAI / Anthropic) |
-| Weather Data | OpenWeatherMap API |
-| Soil Data | NASA Soil Moisture API |
-| Market Data | USDA Agricultural Marketing Service API |
-| Crop Health | PlantVillage API, Plantix API |
-| Version Control | GitHub |
+| Layer        | Technology                        |
+|--------------|-----------------------------------|
+| Frontend     | React.js + Recharts               |
+| Backend      | Python + FastAPI                  |
+| AI Agent     | LLM API (OpenAI/Anthropic)        |
+| Weather Data | OpenWeatherMap API                 |
+| Soil Data    | NASA Soil Moisture                 |
+| Market Data  | USDA Agricultural Marketing API   |
+| Health Data  | PlantVillage / Plantix APIs       |
 
----
-
-## Getting Started
-
-### Prerequisites
-
-- Python 3.10+
-- Node.js 18+
-- API keys for OpenWeatherMap, USDA AMS, and your chosen LLM provider
-
-### Backend
+## Quick Start
 
 ```bash
+# Backend
 cd backend
-cp .env.example .env        # fill in your API keys
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -r requirements.txt
 uvicorn main:app --reload
-```
 
-The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
-
-### Frontend
-
-```bash
+# Frontend
 cd frontend
 npm install
-npm start
+npm run dev
 ```
 
-Opens at `http://localhost:3000`.
+## Available API Routes
 
----
-
-## Key Features
-
-- **Ranked crop recommendations** with suitability scores based on live environmental data
-- **Planting confidence levels** and seasonal rotation suggestions
-- **Price forecasts** with optimal selling-window alerts
-- **Disease and pest detection** with treatment recommendations
-- **Early warning system** for emerging crop health issues
-- **Simple visual dashboard** designed for farmers, not data scientists
-
----
-
-## Project Structure
-
-```
-farmwise-ai/
-├── backend/
-│   ├── agents/
-│   │   └── crop_suitability_agent.py   # Core AI agent logic
-│   ├── integrations/
-│   │   ├── market_api.py               # USDA / commodity price APIs
-│   │   ├── health_api.py               # PlantVillage / Plantix APIs
-│   │   └── weather_api.py              # OpenWeatherMap + NASA soil
-│   ├── main.py                         # FastAPI app entry point
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── CropRecommendations.jsx
-│   │   │   ├── MarketPriceForecast.jsx
-│   │   │   └── CropHealthMonitor.jsx
-│   │   └── App.jsx
-│   └── package.json
-└── README.md
-```
-
----
-
-## Evaluation
-
-The system is tested against simulated farm scenarios covering a range of environmental conditions and crop types. Evaluation criteria include:
-
-- Accuracy of crop suitability rankings vs. agronomic ground truth
-- Price forecast precision against actual market outcomes
-- Disease detection recall rate in health monitoring scenarios
-- Dashboard usability with non-technical users
-
-Results are documented in the final project report.
-
----
+- `POST /api/v1/agents/suitability/analyze`
+- `POST /api/v1/market/forecast`
+- `POST /api/v1/health/monitoring`
+- `POST /api/v1/farm-advisor/chat`
 
 ## Team
 
-| Member | Role |
-|---|---|
-| Swabhiman Paudel | Project Lead & AI Agent Developer |
-| Prabin B.K. | Integration Lead & Data Engineer |
-| Pratik Pokharel | UI/UX Designer & Front-End Developer |
-| Sujal Thapa | System Architect & Documentation Lead |
-
----
-
-## Course Context
-
-This project was developed as part of a course project exploring applied AI agent design. The full proposal, architecture documentation, and evaluation report are available in the `/docs` folder.
-
----
-
-*FarmWise AI — making agricultural intelligence accessible to every farmer, not just the largest ones.*
+| Member            | Role                                  |
+|-------------------|---------------------------------------|
+| Swabhiman Paudel  | Project Lead & AI Agent Developer     |
+| Prabin B.K.       | Integration Lead & Data Engineer      |
+| Pratik Pokharel   | UI/UX Designer & Front-End Developer  |
+| Sujal Thapa       | System Architect & Documentation Lead |
