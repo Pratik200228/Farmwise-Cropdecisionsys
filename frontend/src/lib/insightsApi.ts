@@ -629,3 +629,25 @@ export async function runHealthMonitoring(
   }
   return postJson<HealthReport>(PATHS.health, { crop, growthStage, symptomsNote });
 }
+
+export async function runHealthScan(file: File): Promise<HealthReport> {
+  if (useMock()) {
+    await delay(1200);
+    // Return a mock response since CNN isn't connected in mock mode
+    return mockHealth("Unknown", "various", "Visual scan simulation");
+  }
+  
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}${PATHS.health.replace('/monitoring', '/scan')}`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API Error ${res.status}: ${text}`);
+  }
+  return res.json() as Promise<HealthReport>;
+}
