@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from "react";
-import { runHealthMonitoring, supportedMarketCrops } from "../lib/insightsApi";
+import { useState, type FormEvent, type ChangeEvent } from "react";
+import { runHealthMonitoring, runHealthScan, supportedMarketCrops } from "../lib/insightsApi";
 import type { HealthIssue, HealthReport } from "../types/insights";
 import { AgentBadge } from "./AgentBadge";
 
@@ -77,15 +77,37 @@ export function CropHealthPanel() {
   const [crop, setCrop] = useState(crops[0]);
   const [growthStage, setGrowthStage] = useState("vegetative");
   const [symptoms, setSymptoms] = useState("");
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [report, setReport] = useState<HealthReport | null>(null);
   const [running, setRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files && e.target.files[0]) {
+      const file = e.target.files[0];
+      setImageFile(file);
+      setPreviewUrl(URL.createObjectURL(file));
+      setSymptoms(""); // Clear text symptoms if image is uploaded
+    }
+  };
+
+  const removeImage = () => {
+    setImageFile(null);
+    if (previewUrl) URL.revokeObjectURL(previewUrl);
+    setPreviewUrl(null);
+  };
 
   const run = async (note: string) => {
     setRunning(true);
     setError(null);
     try {
-      const result = await runHealthMonitoring(crop, growthStage, note);
+      let result;
+      if (imageFile) {
+        result = await runHealthScan(imageFile);
+      } else {
+        result = await runHealthMonitoring(crop, growthStage, note);
+      }
       setReport(result);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Health request failed");
@@ -100,6 +122,7 @@ export function CropHealthPanel() {
   };
 
   const onPreset = (preset: string) => {
+    removeImage();
     setSymptoms(preset);
     void run(preset);
   };
@@ -108,18 +131,19 @@ export function CropHealthPanel() {
     <div className="health-page">
       <header className="page-head">
         <div>
-          <div className="page-head__kicker">External API service</div>
-          <h1 className="page-head__title">Crop Health Monitoring</h1>
+          <div className="page-head__kicker">Agent 3 of 3 · AI agent</div>
+          <h1 className="page-head__title">Crop Health Agent</h1>
           <p className="page-head__sub">
-            Monitoring service for disease, pest, nutrient, and water stress
-            signals. Symptom notes work now, and the same workflow is ready for
-            image-based tools such as PlantVillage or Plantix later.
+            Model-based reflex agent — reads symptom descriptions (and later
+            images via PlantVillage / Plantix) to classify likely diseases,
+            pests, and nutrient issues with treatment steps you can act on
+            today.
           </p>
           <AgentBadge
             accent="health"
-            name="Crop Health API"
-            type="api-service"
-            role="Translates symptom evidence into likely health issues and scouting steps."
+            name="Agent 3 · Crop Health"
+            type="model-based"
+            role="Identifies crop stress from symptoms and percepts, then recommends scouting and treatment."
           />
         </div>
       </header>
@@ -158,13 +182,41 @@ export function CropHealthPanel() {
             </label>
           </div>
 
-          <label className="field">
-            <span className="field__label">What do you see?</span>
+          <div className="field">
+            <span className="field__label">Upload symptomatic leaf photo</span>
+            {previewUrl ? (
+              <div className="health-input__preview" style={{ position: 'relative', display: 'inline-block', marginBottom: '1rem' }}>
+                <img src={previewUrl} alt="Leaf preview" style={{ height: '120px', borderRadius: '8px', objectFit: 'cover' }} />
+                <button type="button" onClick={removeImage} style={{ position: 'absolute', top: '-8px', right: '-8px', background: 'red', color: 'white', borderRadius: '50%', width: '24px', height: '24px', border: 'none', cursor: 'pointer' }}>×</button>
+              </div>
+            ) : (
+              <label 
+                className="field__input field__input--area" 
+                style={{ 
+                  display: 'flex', flexDirection: 'column', alignItems: 'center', 
+                  justifyContent: 'center', padding: '2rem', cursor: 'pointer',
+                  borderStyle: 'dashed', backgroundColor: '#f9fafb'
+                }}>
+                <span style={{ fontSize: '24px', marginBottom: '1rem' }}>📸</span>
+                <span style={{ color: '#4b5563', fontWeight: 500 }}>Select an image block to crop</span>
+                <input 
+                  type="file" 
+                  accept="image/*"
+                  onChange={handleImageChange}
+                  style={{ display: 'none' }} 
+                />
+              </label>
+            )}
+          </div>
+
+          <label className="field" style={{ opacity: imageFile ? 0.5 : 1 }}>
+            <span className="field__label">Or type what you see</span>
             <textarea
               className="field__input field__input--area"
               rows={4}
               placeholder="e.g. lower leaves turning yellow with brown rings; some leaves curling"
               value={symptoms}
+              disabled={!!imageFile}
               onChange={(e) => setSymptoms(e.target.value)}
             />
           </label>
@@ -187,12 +239,11 @@ export function CropHealthPanel() {
           </div>
 
           <div className="health-input__actions">
-            <button type="submit" className="btn btn--primary" disabled={running}>
+            <button type="submit" className="btn btn--primary" disabled={running || (!symptoms.trim() && !imageFile)}>
               {running ? "Analyzing…" : "Analyze crop health"}
             </button>
             <span className="health-input__hint">
-              Photos will plug into PlantVillage / Plantix when the backend is
-              wired.
+              Powered by MobileNetV2 Deep Learning & PlantVillage data.
             </span>
           </div>
 

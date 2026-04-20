@@ -9,20 +9,36 @@ import type {
   SellingWindow,
   SuitabilityReport,
 } from "../types/insights";
-import { buildApiUrl, isMockAiEnabled } from "./runtimeConfig";
 
 /* -------------------------------------------------------------------------- */
 /*  Shared helpers                                                            */
 /* -------------------------------------------------------------------------- */
 
-export const PATHS = {
+const PATHS = {
   suitability: "/api/v1/agents/suitability/analyze",
   market: "/api/v1/market/forecast",
   health: "/api/v1/health/monitoring",
 } as const;
 
+function apiBase(): string {
+  const raw = import.meta.env.VITE_API_BASE_URL;
+  if (raw && raw.length > 0) return raw.replace(/\/$/, "");
+  return "";
+}
+
+function useMock(): boolean {
+  // default to mock when the var is unset — keeps the UI demo-able out of the box
+  const v = import.meta.env.VITE_USE_MOCK_AI;
+  return v === undefined || v === "" || v === "true";
+}
+
+function url(path: string): string {
+  const base = apiBase();
+  return base ? `${base}${path}` : path;
+}
+
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(buildApiUrl(path), {
+  const res = await fetch(url(path), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
@@ -287,7 +303,7 @@ function mockSuitability(context: FarmContext): SuitabilityReport {
 export async function runCropSuitabilityAgent(
   context: FarmContext,
 ): Promise<SuitabilityReport> {
-  if (isMockAiEnabled()) {
+  if (useMock()) {
     await delay(650);
     return mockSuitability(context);
   }
@@ -400,7 +416,7 @@ function mockMarket(crop: string): MarketReport {
 }
 
 export async function fetchMarketForecast(crop: string): Promise<MarketReport> {
-  if (isMockAiEnabled()) {
+  if (useMock()) {
     await delay(450);
     return mockMarket(crop);
   }
@@ -607,9 +623,31 @@ export async function runHealthMonitoring(
   growthStage: string,
   symptomsNote: string,
 ): Promise<HealthReport> {
-  if (isMockAiEnabled()) {
+  if (useMock()) {
     await delay(550);
     return mockHealth(crop, growthStage, symptomsNote);
   }
   return postJson<HealthReport>(PATHS.health, { crop, growthStage, symptomsNote });
+}
+
+export async function runHealthScan(file: File): Promise<HealthReport> {
+  if (useMock()) {
+    await delay(1200);
+    // Return a mock response since CNN isn't connected in mock mode
+    return mockHealth("Unknown", "various", "Visual scan simulation");
+  }
+  
+  const formData = new FormData();
+  formData.append("file", file);
+
+  const res = await fetch(`${API_BASE}${PATHS.health.replace('/monitoring', '/scan')}`, {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`API Error ${res.status}: ${text}`);
+  }
+  return res.json() as Promise<HealthReport>;
 }
