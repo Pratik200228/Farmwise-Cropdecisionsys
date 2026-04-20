@@ -1,28 +1,39 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api.routers import suitability
+from app.api.routers import suitability, market, health
 
 app = FastAPI(title="FarmWise AI Custom Backend")
 
-# Configure CORS so the Vite frontend (usually on port 5173/3000) can talk to us (port 8000)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allows all origins for local dev
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Connect the custom python agent router
 app.include_router(
     suitability.router, 
     prefix="/api/v1/agents/suitability", 
-    tags=["Suitability Agent"]
+    tags=["Agent 1 · Crop Suitability"]
+)
+
+app.include_router(
+    market.router,
+    prefix="/api/v1/market",
+    tags=["Agent 2 · Market Intelligence"]
+)
+
+app.include_router(
+    health.router,
+    prefix="/api/v1/health",
+    tags=["Agent 3 · Crop Health"]
 )
 
 @app.get("/")
 def read_root():
     return {
         "status": "Online",
-        "role": "FarmWise Custom Agent Engine"
+        "agents": ["Crop Suitability", "Market Intelligence", "Crop Health"],
+        "role": "FarmWise Custom Agent Engine — All 3 Agents Active"
     }

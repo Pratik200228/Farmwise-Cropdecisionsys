@@ -1,5 +1,20 @@
 from typing import Dict, List, Any
+import os
+import joblib
+import logging
+
 from app.api.schemas import FarmContext, CropSuitability, FitScores, SuitabilityResponse, SuitabilityRankedCrop
+
+# Load ML models
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+try:
+    RF_MODEL = joblib.load(os.path.join(MODEL_DIR, "crop_recommendation_model.pkl"))
+    LE_MODEL = joblib.load(os.path.join(MODEL_DIR, "crop_label_encoder.pkl"))
+except Exception as e:
+    logging.warning(f"Could not load ML models: {e}. Falling back to rule-based.")
+    RF_MODEL = None
+    LE_MODEL = None
+
 
 # Reference catalog adapted from the original Typescript logic to ensure feature parity
 CROP_CATALOG = [
@@ -101,7 +116,31 @@ def generate_suitability_report(context: FarmContext) -> SuitabilityResponse:
     season = context.season.lower()
     env = context.env
 
+    # -----------------------------
+    # Evaluate using Rules or ML
+    # -----------------------------
     evaluated_crops = []
+    
+    if RF_MODEL is not None and LE_MODEL is not None:
+        # Estimate N, P, K from soil type since frontend doesn't provide them
+        npk_estimates = {
+            "loam": (90, 42, 43),
+            "silt": (70, 50, 40),
+            "clay": (50, 60, 50),
+            "sandy": (30, 20, 20),
+            "black": (80, 60, 50)
+        }
+        n, p, k = npk_estimates.get(target_soil, (60, 40, 40))
+
+        # Model expects: ["N", "P", "K", "temperature", "humidity", "ph", "rainfall"]
+        features = [[n, p, k, env.temperatureC, env.humidityPct, env.soilPh, env.rainfallMm]]
+        try:
+            probas = RF_MODEL.predict_proba(features)[0]
+            ml_scores = {LE_MODEL.inverse_transform([i])[0].capitalize(): prob for i, prob in enumerate(probas)}
+        except Exception:
+            ml_scores = {}
+    else:
+        ml_scores = {}
 
     for profile in CROP_CATALOG:
         t_fit = range_fit(env.temperatureC, profile["tempC"])
@@ -114,8 +153,15 @@ def generate_suitability_report(context: FarmContext) -> SuitabilityResponse:
         s_fit = round(soil_type_fit * 0.6 + ph_fit * 0.4)
 
         base_score = round(t_fit * 0.28 + r_fit * 0.25 + s_fit * 0.22 + h_fit * 0.15 + w_fit * 0.1)
-
         confidence = clamp(0.55 + (min(t_fit, r_fit, s_fit) / 100) * 0.4 - (0.05 if env.soilMoisturePct < 20 else 0), 0.4, 0.98)
+
+        # Apply ML Probabilities if available
+        if ml_scores and profile["name"] in ml_scores:
+            ml_prob = ml_scores[profile["name"]]
+            # ML output strongly dictates base_score
+            base_score = max(5, int(ml_prob * 100) + int(base_score * 0.2)) # Blend ML with rules fallback
+            base_score = min(base_score, 100)
+            confidence = max(0.6, confidence + (ml_prob * 0.2))
 
         warnings = []
         if t_fit < 55: warnings.append("Temperature is outside the preferred band.")
@@ -125,6 +171,8 @@ def generate_suitability_report(context: FarmContext) -> SuitabilityResponse:
         if w_fit < 55: warnings.append("Wind exposure is high - stake tall crops.")
 
         rationale_bits = [f"Temperature fit {int(t_fit)}/100, rainfall fit {int(r_fit)}/100, soil fit {int(s_fit)}/100."]
+        if ml_scores:
+            rationale_bits.append("ML Model prediction factored into final score.")
         if not warnings:
             rationale_bits.append("All key environmental factors sit inside the crop's comfort band.")
             
