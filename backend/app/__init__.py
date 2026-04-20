@@ -1,0 +1,1 @@
+"""FarmWise AI backend package."""
