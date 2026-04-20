@@ -9,110 +9,74 @@ import type {
   SuitabilityAgentResult,
   SuitabilityRequestBody,
 } from "../types/agents";
+import type { HealthReport, MarketReport, SuitabilityReport } from "../types/insights";
+import {
+  fetchMarketForecast,
+  runCropSuitabilityAgent,
+  runHealthMonitoring,
+} from "./insightsApi";
 
-const PATHS = {
-  suitability: "/api/v1/agents/suitability/analyze",
-  market: "/api/v1/agents/market/forecast",
-  health: "/api/v1/agents/health/monitoring-plan",
-} as const;
-
-function apiBase(): string {
-  const raw = import.meta.env.VITE_API_BASE_URL;
-  if (raw && raw.length > 0) return raw.replace(/\/$/, "");
-  return "";
+function inferGrowthStage(context: FarmContext): string {
+  const raw = `${context.season} ${context.notes}`.toLowerCase();
+  if (raw.includes("seed")) return "seedling";
+  if (raw.includes("flower")) return "flowering";
+  if (raw.includes("fruit")) return "fruiting";
+  if (raw.includes("matur")) return "maturity";
+  return "vegetative";
 }
 
-function useMock(): boolean {
-  return import.meta.env.VITE_USE_MOCK_AI === "true";
-}
-
-function url(path: string): string {
-  const base = apiBase();
-  return base ? `${base}${path}` : path;
-}
-
-async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(url(path), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Request failed (${res.status})`);
-  }
-  return res.json() as Promise<T>;
-}
-
-function mockDelay(ms = 450): Promise<void> {
-  return new Promise((r) => setTimeout(r, ms));
-}
-
-function mockSuitability(context: FarmContext): SuitabilityAgentResult {
-  const region = context.region.trim() || "your region";
-  const season = context.season || "this season";
+function mapSuitability(report: SuitabilityReport): SuitabilityAgentResult {
   return {
     agent: "suitability",
-    environmentalSummary: `For **${region}**, **${season}** on **${context.soilType}** soil, the agent weights temperature stress, rainfall reliability, and soil water holding capacity. Goal: **${context.primaryGoal}**.`,
-    rankedCrops: [
-      {
-        name: "Maize",
-        score: 88,
-        rationale: "Strong fit for warm-season growth and local demand; matches typical kharif moisture.",
-      },
-      {
-        name: "Lentil",
-        score: 76,
-        rationale: "Good rotation option if drainage is adequate; watch terminal heat at pod fill.",
-      },
-      {
-        name: "Tomato",
-        score: 69,
-        rationale: "Profitable but higher disease pressure; needs tight scouting (see Health agent).",
-      },
-    ],
+    environmentalSummary: report.summary,
+    rankedCrops: report.crops.slice(0, 3).map((crop) => ({
+      name: crop.name,
+      score: crop.score,
+      rationale: crop.rationale,
+    })),
   };
 }
 
-function mockMarket(context: FarmContext, crop: string, topScore: number): MarketAgentResult {
+function mapMarket(report: MarketReport): MarketAgentResult {
+  const riskNotes =
+    report.currentPrice >= report.seasonalMedian
+      ? "Current price is above the seasonal median; protect margin if transport and storage costs are rising."
+      : "Current price is below the seasonal median; avoid forced sales unless storage, cash flow, or spoilage risk is high.";
+
   return {
     agent: "market",
-    cropFocus: crop,
-    outlook: `**${crop}** basis and wholesale trends for **${context.region.trim() || "the area"}** favor staggered sales when local supply peaks. Suitability score **${topScore}** supports committing acreage if storage/logistics match.`,
-    suggestedWindows: [
-      "Pre-harvest: hedge or forward-sell 20–30% if price > seasonal median.",
-      "Main harvest: 2-week sell band around historical local peak (USDA series when live).",
-      "Post-harvest: only if drying/storage cost < expected basis recovery.",
-    ],
-    riskNotes:
-      "Volatile transport and fuel costs can erase margin—pair with the Health agent’s loss-prevention plan.",
+    cropFocus: report.crop,
+    outlook: report.summary,
+    suggestedWindows: report.windows.map(
+      (window) =>
+        `${window.label} (${window.window}) - ${window.reason} [${window.confidence} confidence]`,
+    ),
+    riskNotes,
   };
 }
 
-function mockHealth(
-  context: FarmContext,
-  crop: string,
-  symptomsNote?: string,
-): HealthAgentResult {
-  const intro = symptomsNote?.trim()
-    ? `**Reported symptoms:** _${symptomsNote.trim()}_ — prioritize ruling out nutrition/water stress before disease ID.`
-    : null;
+function mapHealth(report: HealthReport, symptomsNote?: string): HealthAgentResult {
+  const priorityRisks = report.issues.map((issue) =>
+    issue.name === "No significant issue detected"
+      ? issue.name
+      : `${issue.name} (${Math.round(issue.probability * 100)}% likely)`,
+  );
+
+  const scoutingPlan = symptomsNote?.trim()
+    ? [
+        `Reported symptoms: ${symptomsNote.trim()}. Validate this against field photos before treatment.`,
+        ...report.scoutingPlan,
+      ]
+    : report.scoutingPlan;
+
   return {
     agent: "health",
-    cropFocus: crop,
-    scoutingPlan: [
-      ...(intro ? [intro] : []),
-      `Weekly canopy walk for **${crop}**; photograph both upper and lower leaf surfaces.`,
-      "Track growth stage vs. weather: humidity + warmth triggers fungal cycles.",
-      "Border rows and low spots first—early infestation often starts there.",
-      "If irrigation: check for root-zone saturation vs. crop water demand.",
-    ],
-    priorityRisks:
-      context.soilType === "clay"
-        ? ["Root / crown rots under wet feet", "Nutrient tie-up; verify tissue test if yellowing"]
-        : ["Mite / thrips in dry spells", "Wind-driven fungal spores after storms"],
+    cropFocus: report.crop,
+    scoutingPlan,
+    priorityRisks,
     whenToEscalate:
-      "Escalate to lab or extension if >15% of plants show progressive lesions within 5 days or if yield-bearing tissue is affected.",
+      report.scoutingPlan[report.scoutingPlan.length - 1] ??
+      "Escalate if symptoms spread quickly or affect yield-bearing tissue.",
   };
 }
 
@@ -141,33 +105,28 @@ function mergeSummary(
 export async function callSuitabilityAgent(
   body: SuitabilityRequestBody,
 ): Promise<SuitabilityAgentResult> {
-  if (useMock()) {
-    await mockDelay();
-    return mockSuitability(body.context);
-  }
-  return postJson<SuitabilityAgentResult>(PATHS.suitability, body);
+  const report = await runCropSuitabilityAgent(body.context);
+  return mapSuitability(report);
 }
 
 export async function callMarketAgent(body: MarketRequestBody): Promise<MarketAgentResult> {
-  if (useMock()) {
-    await mockDelay();
-    return mockMarket(body.context, body.cropFocus, body.suitabilityTopScore ?? 0);
-  }
-  return postJson<MarketAgentResult>(PATHS.market, body);
+  const report = await fetchMarketForecast(body.cropFocus);
+  return mapMarket(report);
 }
 
 export async function callHealthAgent(body: HealthRequestBody): Promise<HealthAgentResult> {
-  if (useMock()) {
-    await mockDelay();
-    return mockHealth(body.context, body.cropFocus, body.symptomsNote);
-  }
-  return postJson<HealthAgentResult>(PATHS.health, body);
+  const report = await runHealthMonitoring(
+    body.cropFocus,
+    inferGrowthStage(body.context),
+    body.symptomsNote ?? "",
+  );
+  return mapHealth(report, body.symptomsNote);
 }
 
 const STEP_LABELS: Record<string, string> = {
-  suitability: "Agent 1 — Crop suitability (environment & soil)",
-  market: "Agent 2 — Market intelligence (price & timing)",
-  health: "Agent 3 — Crop health (scouting & risk)",
+  suitability: "Crop Suitability AI Agent",
+  market: "Market Price Service",
+  health: "Crop Health Service",
 };
 
 function initSteps(): OrchestrationStep[] {
@@ -179,8 +138,8 @@ function initSteps(): OrchestrationStep[] {
 }
 
 /**
- * Complex task: produce a season plan by orchestrating **three different AI agents**.
- * Suitability runs first (picks focus crop); Market and Health run in parallel on that crop.
+ * Build an integrated season plan from the Crop Suitability AI agent plus the
+ * market and crop-health service layers described in the project proposal.
  */
 export async function runMultiAgentSeasonPlan(
   context: FarmContext,
@@ -189,7 +148,11 @@ export async function runMultiAgentSeasonPlan(
 ): Promise<MultiAgentSeasonPlan> {
   let steps = initSteps();
 
-  const update = (kind: keyof typeof PATHS, status: OrchestrationStep["status"], err?: string) => {
+  const update = (
+    kind: OrchestrationStep["kind"],
+    status: OrchestrationStep["status"],
+    err?: string,
+  ) => {
     steps = steps.map((s) =>
       s.kind === kind ? { ...s, status, error: err } : s,
     );
@@ -202,7 +165,7 @@ export async function runMultiAgentSeasonPlan(
     suitability = await callSuitabilityAgent({ context });
     update("suitability", "done");
   } catch (e) {
-    const msg = e instanceof Error ? e.message : "Suitability agent failed";
+    const msg = e instanceof Error ? e.message : "Suitability analysis failed";
     update("suitability", "error", msg);
     throw new Error(msg);
   }
@@ -237,7 +200,7 @@ export async function runMultiAgentSeasonPlan(
     const msg =
       settled[0].reason instanceof Error
         ? settled[0].reason.message
-        : "Market agent failed";
+        : "Market service failed";
     errs.push(msg);
     update("market", "error", msg);
   }
@@ -249,13 +212,13 @@ export async function runMultiAgentSeasonPlan(
     const msg =
       settled[1].reason instanceof Error
         ? settled[1].reason.message
-        : "Health agent failed";
+        : "Health service failed";
     errs.push(msg);
     update("health", "error", msg);
   }
 
   if (!market || !health) {
-    throw new Error(errs.join(" · ") || "Market or health agent failed");
+    throw new Error(errs.join(" · ") || "Market or health service failed");
   }
 
   const integratedSummary = mergeSummary(

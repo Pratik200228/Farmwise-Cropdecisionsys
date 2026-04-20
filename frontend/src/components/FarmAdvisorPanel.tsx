@@ -43,9 +43,9 @@ export function FarmAdvisorPanel() {
       <section className="advisor-chat card" aria-label="Farm advisor chat">
         <header className="advisor-chat__head">
           <div>
-            <h1 className="advisor-chat__title">Farm advisor</h1>
+            <h1 className="advisor-chat__title">FarmWise assistant</h1>
             <p className="advisor-chat__sub">
-              Context-aware LLM interface for your Crop Suitability agent
+              Context-aware assistant for the crop suitability workflow and connected services
             </p>
           </div>
           <button

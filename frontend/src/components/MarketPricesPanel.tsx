@@ -64,18 +64,18 @@ export function MarketPricesPanel() {
     <div className="market-page">
       <header className="page-head">
         <div>
-          <div className="page-head__kicker">Agent 2 of 3 · AI agent</div>
-          <h1 className="page-head__title">Market Intelligence Agent</h1>
+          <div className="page-head__kicker">External API service</div>
+          <h1 className="page-head__title">Market Price Service</h1>
           <p className="page-head__sub">
-            Utility-based agent — blends USDA / commodity-API price history
-            with seasonal models to recommend the sell windows that maximize
-            farmer margin.
+            Forecasting service backed by USDA and commodity-style market data.
+            It surfaces price direction, likely selling windows, and a reference
+            median so farmers can time sales with better context.
           </p>
           <AgentBadge
             accent="market"
-            name="Agent 2 · Market Intelligence"
-            type="utility-based"
-            role="Maximizes expected profit by ranking sell windows against a seasonal median."
+            name="Market Price API"
+            type="api-service"
+            role="Forecasts price direction and highlights selling windows from market data."
           />
         </div>
 
