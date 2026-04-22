@@ -647,7 +647,14 @@ export async function runHealthScan(file: File): Promise<HealthReport> {
 
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API Error ${res.status}: ${text}`);
+    let detail = text;
+    try {
+      const j = JSON.parse(text) as { detail?: unknown };
+      if (typeof j.detail === "string") detail = j.detail;
+    } catch {
+      /* keep raw body */
+    }
+    throw new Error(`API Error ${res.status}: ${detail}`);
   }
   return res.json() as Promise<HealthReport>;
 }

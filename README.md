@@ -62,7 +62,8 @@ The AI agent handles complex environmental reasoning. External APIs handle marke
 
 - Python 3.10+
 - Node.js 18+
-- API keys for OpenWeatherMap, USDA AMS, and your chosen LLM provider
+- **Leaf photo diagnosis** needs **`tensorflow-cpu`** (declared in `backend/requirements.txt`). Run `pip install -r requirements.txt` from `backend/` before using **Crop Health → image upload**; otherwise the API returns **503** with an explicit setup message.
+- Optional API keys for OpenWeatherMap, USDA AMS, or external LLM providers if you extend integrations beyond the bundled ML models.
 
 ### Backend
 

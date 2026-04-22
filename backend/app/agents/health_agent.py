@@ -9,31 +9,82 @@ import time
 import os
 import io
 import logging
-from typing import List
+from pathlib import Path
+from typing import List, Optional, Sequence, Any
+
 from PIL import Image
 import numpy as np
 
-# Load ML models
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
-try:
-    import tensorflow as tf
-    import joblib
+# --- Plant disease CNN (MobileNetV2 .h5 + class list) ----------------------------
 
-    MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
-    CNN_MODEL_PATH = os.path.join(MODEL_DIR, "plant_disease_model.h5")
-    CNN_CLASSES_PATH = os.path.join(MODEL_DIR, "disease_class_names.pkl")
+_AGENT_DIR = Path(__file__).resolve().parent
+_MODEL_DIR = _AGENT_DIR.parent / "models"
 
-    if os.path.exists(CNN_MODEL_PATH) and os.path.exists(CNN_CLASSES_PATH):
-        # compile=False avoids Keras 3 warnings for inference-only .h5 checkpoints
-        CNN_MODEL = tf.keras.models.load_model(CNN_MODEL_PATH, compile=False)
-        CNN_CLASSES = joblib.load(CNN_CLASSES_PATH)
-    else:
-        CNN_MODEL = None
-        CNN_CLASSES = []
-except Exception as e:
-    logging.warning(f"Could not load Health CNN model: {e}")
+CNN_MODEL: Any = None
+CNN_CLASSES: Optional[Sequence[Any]] = None
+_CNN_LOAD_ERROR: Optional[str] = None
+
+
+def init_cnn() -> None:
+    """Load TensorFlow + weights once (safe to call multiple times)."""
+    global CNN_MODEL, CNN_CLASSES, _CNN_LOAD_ERROR
+
     CNN_MODEL = None
-    CNN_CLASSES = []
+    CNN_CLASSES = None
+    _CNN_LOAD_ERROR = None
+
+    os.environ.setdefault("TF_CPP_MIN_LOG_LEVEL", "2")
+    h5 = _MODEL_DIR / "plant_disease_model.h5"
+    pkl = _MODEL_DIR / "disease_class_names.pkl"
+
+    if not h5.is_file() or not pkl.is_file():
+        _CNN_LOAD_ERROR = (
+            f"Plant disease model files not found. Expected:\n  {h5}\n  {pkl}\n"
+            "Include the `backend/app/models` directory when you deploy."
+        )
+        logging.warning(_CNN_LOAD_ERROR)
+        return
+
+    try:
+        import tensorflow as tf  # noqa: PLC0415
+        import joblib
+    except ImportError as e:
+        _CNN_LOAD_ERROR = (
+            f"TensorFlow is not installed ({e}). "
+            "From the `backend` folder run: pip install -r requirements.txt "
+            "(installs tensorflow-cpu for image diagnosis)."
+        )
+        logging.warning(_CNN_LOAD_ERROR)
+        return
+
+    try:
+        CNN_MODEL = tf.keras.models.load_model(str(h5), compile=False)
+        CNN_CLASSES = joblib.load(str(pkl))
+        if not CNN_CLASSES or not isinstance(CNN_CLASSES, (list, tuple)):
+            _CNN_LOAD_ERROR = "disease_class_names.pkl is empty or has an unexpected format."
+            CNN_MODEL = None
+            CNN_CLASSES = None
+            logging.warning(_CNN_LOAD_ERROR)
+            return
+        logging.info("Loaded plant disease CNN from %s", h5)
+    except Exception as e:
+        CNN_MODEL = None
+        CNN_CLASSES = None
+        _CNN_LOAD_ERROR = f"Failed to load plant disease CNN: {e}"
+        logging.exception(_CNN_LOAD_ERROR)
+
+
+def cnn_ready() -> bool:
+    return CNN_MODEL is not None and CNN_CLASSES is not None and len(CNN_CLASSES) > 0
+
+
+def cnn_status_message() -> str:
+    if cnn_ready():
+        return f"Plant disease CNN ready ({len(CNN_CLASSES)} classes)."  # type: ignore[arg-type]
+    return _CNN_LOAD_ERROR or "Plant disease CNN is not available."
+
+
+init_cnn()
 
 # Disease Knowledge Base (Fallback for text & Treatment Mappings)
 HEALTH_RULES = [
@@ -114,8 +165,8 @@ HEALTHY_RESPONSE = {
 
 def analyze_plant_image(image_bytes: bytes) -> dict:
     """Run the MobileNetV2 CNN on an uploaded leaf image."""
-    if CNN_MODEL is None or not CNN_CLASSES:
-        return {"error": "Machine learning model not loaded on backend."}
+    if not cnn_ready():
+        return {"error": _CNN_LOAD_ERROR or "Machine learning model not loaded on backend."}
     try:
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
         image = image.resize((128, 128))
@@ -125,7 +176,7 @@ def analyze_plant_image(image_bytes: bytes) -> dict:
         predictions = CNN_MODEL.predict(img_array, verbose=0)[0]
         max_idx = np.argmax(predictions)
         confidence = float(predictions[max_idx])
-        predicted_class = CNN_CLASSES[max_idx]
+        predicted_class = str(CNN_CLASSES[int(max_idx)])
         
         # Parse class: e.g. "Tomato___Early_blight" -> crop: "Tomato", issue: "Early_blight"
         parts = predicted_class.split("___")
