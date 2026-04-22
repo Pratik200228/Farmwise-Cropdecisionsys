@@ -24,7 +24,8 @@ try:
     CNN_CLASSES_PATH = os.path.join(MODEL_DIR, "disease_class_names.pkl")
 
     if os.path.exists(CNN_MODEL_PATH) and os.path.exists(CNN_CLASSES_PATH):
-        CNN_MODEL = tf.keras.models.load_model(CNN_MODEL_PATH)
+        # compile=False avoids Keras 3 warnings for inference-only .h5 checkpoints
+        CNN_MODEL = tf.keras.models.load_model(CNN_MODEL_PATH, compile=False)
         CNN_CLASSES = joblib.load(CNN_CLASSES_PATH)
     else:
         CNN_MODEL = None

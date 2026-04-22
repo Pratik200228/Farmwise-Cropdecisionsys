@@ -8,5 +8,6 @@ numpy
 scikit-learn
 joblib
 pillow
-tensorflow
+# CPU build: reliable on Windows/macOS/Linux without CUDA; sufficient for CNN inference
+tensorflow-cpu>=2.16,<2.20
 requests
