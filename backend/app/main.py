@@ -1,24 +1,9 @@
-import logging
-from contextlib import asynccontextmanager
-
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.routers import suitability, market, health
 
-logger = logging.getLogger(__name__)
-
-
-@asynccontextmanager
-async def lifespan(app: FastAPI):
-    from app.agents import health_agent
-
-    # CNN is initialized when this module is imported; log status at startup for deploy debugging
-    logger.info("Crop health CNN: %s", health_agent.cnn_status_message())
-    yield
-
-
-app = FastAPI(title="FarmWise AI Custom Backend", lifespan=lifespan)
+app = FastAPI(title="FarmWise AI Custom Backend (Core)")
 
 app.add_middleware(
     CORSMiddleware,
@@ -51,5 +36,5 @@ def read_root():
     return {
         "status": "Online",
         "agents": ["Crop Suitability", "Market Intelligence", "Crop Health"],
-        "role": "FarmWise Custom Agent Engine — All 3 Agents Active"
+        "role": "FarmWise Core API — text health monitoring only (no TensorFlow)"
     }

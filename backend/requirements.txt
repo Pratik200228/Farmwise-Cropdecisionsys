@@ -1,5 +1,4 @@
 fastapi
-python-multipart
 uvicorn[standard]
 python-dotenv
 pydantic
@@ -8,7 +7,4 @@ numpy
 # Match sklearn version used when training/saving .pkl models (avoids unpickle warnings)
 scikit-learn>=1.6.1,<1.7.0
 joblib
-pillow
-# CPU build: reliable on Windows/macOS/Linux without CUDA; sufficient for CNN inference
-tensorflow-cpu>=2.16,<2.20
 requests
