@@ -68,9 +68,11 @@ The AI agent handles complex environmental reasoning. External APIs handle marke
 
 ```bash
 cd backend
-cp .env.example .env        # fill in your API keys
+python -m venv .venv
+# Windows: .venv\Scripts\activate
+# macOS/Linux: source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
 ```
 
 The API will be available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
@@ -80,10 +82,11 @@ The API will be available at `http://localhost:8000`. Interactive docs at `http:
 ```bash
 cd frontend
 npm install
-npm start
+cp .env.example .env        # optional: set VITE_USE_MOCK_AI=false to use the backend above
+npm run dev
 ```
 
-Opens at `http://localhost:3000`.
+Opens at `http://localhost:5173` (Vite dev server; `/api` is proxied to `http://localhost:8000`).
 
 ---
 
