@@ -111,7 +111,7 @@ HEALTHY_RESPONSE = {
     "preventive": ["Maintain current watering and nutrient schedules", "Log photos weekly for trend tracking"]
 }
 
-def analyze_plant_image(image_bytes: bytes) -> dict:
+def analyze_plant_image(image_bytes: bytes, crop_hint: str = None, stage_hint: str = None) -> dict:
     """Run the MobileNetV2 CNN on an uploaded leaf image."""
     if CNN_MODEL is None or not CNN_CLASSES:
         return {"error": "Machine learning model not loaded on backend."}
@@ -128,18 +128,22 @@ def analyze_plant_image(image_bytes: bytes) -> dict:
         
         # Parse class: e.g. "Tomato___Early_blight" -> crop: "Tomato", issue: "Early_blight"
         parts = predicted_class.split("___")
-        crop = parts[0].replace("_", " ") if len(parts) > 1 else "Unknown"
+        crop = parts[0].replace("_", " ") if len(parts) > 1 else (crop_hint or "Unknown")
         issue_raw = parts[1] if len(parts) > 1 else predicted_class
         issue_clean = issue_raw.replace("_", " ")
+
+        # If the model is very uncertain, trust the crop hint
+        if confidence < 0.4 and crop_hint:
+            crop = crop_hint
         
         if issue_clean.lower() == "healthy":
             return {
                 "crop": crop,
-                "growthStage": "Observed via image scan",
-                "healthScore": 90,
+                "growthStage": stage_hint or "Observed via image scan",
+                "healthScore": 95,
                 "overallSeverity": "healthy",
                 "issues": [HEALTHY_RESPONSE],
-                "scoutingPlan": ["Continue weekly visual scouting.", "Photograph canopy regularly."],
+                "scoutingPlan": [f"Continue weekly visual scouting of {crop}.", "Photograph canopy regularly."],
                 "source": "Image Diagnosis Scanner",
                 "generatedAt": int(time.time() * 1000)
             }

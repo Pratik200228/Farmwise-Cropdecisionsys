@@ -606,7 +606,10 @@ function mockHealth(
     return true;
   });
 
-  const healthScore = issues.length === 0 ? 88 : Math.max(40, 92 - issues.length * 14);
+  const healthScore =
+    issues.length === 0
+      ? 95 // Higher baseline for "Healthy"
+      : Math.max(35, 90 - issues.length * 15);
   const overallSeverity = severityFromScore(healthScore);
 
   const finalIssues = issues.length > 0 ? issues : [HEALTHY_ISSUE];
@@ -646,15 +649,21 @@ export async function runHealthMonitoring(
   return postJson<HealthReport>(PATHS.health, { crop, growthStage, symptomsNote });
 }
 
-export async function runHealthScan(file: File): Promise<HealthReport> {
-  if (useMock()) {
-    await delay(1200);
-    // Return a mock response since CNN isn't connected in mock mode
-    return mockHealth("Unknown", "various", "Visual scan simulation");
+export async function runHealthScan(
+  image: File,
+  cropHint: string = "Unknown",
+  stageHint: string = "various",
+): Promise<HealthReport> {
+  const isMock = useMock();
+  if (isMock) {
+    await delay(1500);
+    return mockHealth(cropHint, stageHint, "");
   }
   
   const formData = new FormData();
-  formData.append("file", file);
+  formData.append("file", image);
+  formData.append("crop", cropHint);
+  formData.append("stage", stageHint);
 
   let res: Response;
   try {

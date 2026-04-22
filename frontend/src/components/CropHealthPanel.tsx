@@ -108,7 +108,7 @@ export function CropHealthPanel() {
     try {
       let result;
       if (imageFile) {
-        result = await runHealthScan(imageFile);
+        result = await runHealthScan(imageFile, crop, growthStage);
       } else {
         result = await runHealthMonitoring(crop, growthStage, note);
       }
