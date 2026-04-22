@@ -31,6 +31,7 @@ export function OverviewDashboard({ onNavigate }: Props) {
   const [market, setMarket] = useState<MarketReport | null>(null);
   const [health, setHealth] = useState<HealthReport | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -48,6 +49,8 @@ export function OverviewDashboard({ onNavigate }: Props) {
         if (cancelled) return;
         setMarket(m);
         setHealth(h);
+      } catch (err: any) {
+        if (!cancelled) setError(err.message || "Failed to load dashboard data");
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -81,6 +84,13 @@ export function OverviewDashboard({ onNavigate }: Props) {
           </p>
         </div>
       </header>
+
+      {error ? (
+        <div className="card panel-error" style={{ marginBottom: '1.5rem' }}>
+          <strong>Dashboard Error</strong>
+          <p>{error}</p>
+        </div>
+      ) : null}
 
       {loading && !suit ? (
         <div className="card suit-running" aria-busy>

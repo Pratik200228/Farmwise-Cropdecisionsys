@@ -38,14 +38,30 @@ function url(path: string): string {
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
-  const res = await fetch(url(path), {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
+  let res: Response;
+  try {
+    res = await fetch(url(path), {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+  } catch (err: any) {
+    if (err.name === "TypeError" && err.message === "Failed to fetch") {
+      throw new Error("Backend server is offline. Please start the FastAPI server.");
+    }
+    throw new Error(`Network issue: ${err.message}`);
+  }
+
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(text || `Request failed (${res.status})`);
+    let text = "";
+    try {
+      const data = await res.json();
+      if (data.detail && typeof data.detail === "string") text = data.detail;
+      else if (data.detail?.[0]?.msg) text = data.detail[0].msg; // Pydantic validation error
+    } catch {
+      text = await res.text();
+    }
+    throw new Error(text || `Server error (${res.status})`);
   }
   return res.json() as Promise<T>;
 }
@@ -640,14 +656,29 @@ export async function runHealthScan(file: File): Promise<HealthReport> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE}${PATHS.health.replace('/monitoring', '/scan')}`, {
-    method: "POST",
-    body: formData,
-  });
+  let res: Response;
+  try {
+    res = await fetch(url(PATHS.health.replace('/monitoring', '/scan')), {
+      method: "POST",
+      body: formData,
+    });
+  } catch (err: any) {
+    if (err.name === "TypeError" && err.message === "Failed to fetch") {
+      throw new Error("Backend server is offline. Please start the FastAPI server.");
+    }
+    throw new Error(`Network issue: ${err.message}`);
+  }
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API Error ${res.status}: ${text}`);
+    let text = "";
+    try {
+      const data = await res.json();
+      if (data.detail && typeof data.detail === "string") text = data.detail;
+      else if (data.detail?.[0]?.msg) text = data.detail[0].msg; // Pydantic validation error
+    } catch {
+      text = await res.text();
+    }
+    throw new Error(text || `Server error (${res.status})`);
   }
   return res.json() as Promise<HealthReport>;
 }

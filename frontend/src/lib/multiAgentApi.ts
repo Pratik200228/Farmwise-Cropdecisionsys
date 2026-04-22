@@ -12,8 +12,8 @@ import type {
 
 const PATHS = {
   suitability: "/api/v1/agents/suitability/analyze",
-  market: "/api/v1/agents/market/forecast",
-  health: "/api/v1/agents/health/monitoring-plan",
+  market: "/api/v1/market/forecast",
+  health: "/api/v1/health/monitoring",
 } as const;
 
 function apiBase(): string {
@@ -153,7 +153,14 @@ export async function callMarketAgent(body: MarketRequestBody): Promise<MarketAg
     await mockDelay();
     return mockMarket(body.context, body.cropFocus, body.suitabilityTopScore ?? 0);
   }
-  return postJson<MarketAgentResult>(PATHS.market, body);
+  const raw: any = await postJson(PATHS.market, { crop: body.cropFocus });
+  return {
+    agent: "market",
+    cropFocus: body.cropFocus,
+    outlook: raw.summary || "Trend is typical for current season.",
+    suggestedWindows: raw.windows ? raw.windows.map((w: any) => `${w.window}: ${w.reason}`) : [],
+    riskNotes: "Prices can shift rapidly based on regional yield reports."
+  };
 }
 
 export async function callHealthAgent(body: HealthRequestBody): Promise<HealthAgentResult> {
@@ -161,7 +168,18 @@ export async function callHealthAgent(body: HealthRequestBody): Promise<HealthAg
     await mockDelay();
     return mockHealth(body.context, body.cropFocus, body.symptomsNote);
   }
-  return postJson<HealthAgentResult>(PATHS.health, body);
+  const raw: any = await postJson(PATHS.health, { 
+    crop: body.cropFocus, 
+    growthStage: "vegetative", 
+    symptomsNote: body.symptomsNote || "No specific visual symptoms noted."
+  });
+  return {
+    agent: "health",
+    cropFocus: body.cropFocus,
+    scoutingPlan: raw.scoutingPlan || ["Complete daily scouting passes"],
+    priorityRisks: raw.issues ? raw.issues.map((i: any) => `${i.name} (${i.severity})`) : ["Common pests"],
+    whenToEscalate: "If symptoms spread to upper canopy, consult agronomist."
+  };
 }
 
 const STEP_LABELS: Record<string, string> = {

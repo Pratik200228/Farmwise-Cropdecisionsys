@@ -64,12 +64,10 @@ export function MultiAgentPlanPanel() {
   return (
     <div className="multi-agent">
       <header className="multi-agent__head">
-        <h1 className="multi-agent__title">Multi-agent season plan</h1>
+        <h1 className="multi-agent__title">Season Intelligence Plan</h1>
         <p className="multi-agent__sub">
-          One complex task — <strong>three AI agent types</strong>: suitability
-          (environment), market (prices & timing), and health (scouting &
-          risks). Agent 1 selects the focus crop; agents 2 and 3 run together on
-          that crop.
+          Generates a comprehensive farm strategy by correlating
+          <strong> environmental suitability</strong>, <strong>market trends</strong>, and <strong>health risks</strong> into a single cohesive season plan.
         </p>
       </header>
 
@@ -112,19 +110,17 @@ export function MultiAgentPlanPanel() {
                     : [
                         {
                           kind: "suitability",
-                          label:
-                            "Agent 1 — Crop suitability (environment & soil)",
+                          label: "Calculate environmental suitability",
                           status: "idle",
                         },
                         {
                           kind: "market",
-                          label:
-                            "Agent 2 — Market intelligence (price & timing)",
+                          label: "Analyze market intelligence",
                           status: "idle",
                         },
                         {
                           kind: "health",
-                          label: "Agent 3 — Crop health (scouting & risk)",
+                          label: "Monitor crop health risks",
                           status: "idle",
                         },
                       ]
@@ -146,7 +142,7 @@ export function MultiAgentPlanPanel() {
 
               <div className="agent-cards">
                 <section className="card agent-card agent-card--suit">
-                  <h3 className="agent-card__title">Suitability agent</h3>
+                  <h3 className="agent-card__title">Suitability Forecast</h3>
                   <RichText text={plan.suitability.environmentalSummary} />
                   <ul className="agent-card__list">
                     {plan.suitability.rankedCrops.map((c) => (
@@ -158,7 +154,7 @@ export function MultiAgentPlanPanel() {
                 </section>
 
                 <section className="card agent-card agent-card--market">
-                  <h3 className="agent-card__title">Market agent</h3>
+                  <h3 className="agent-card__title">Market Forecast</h3>
                   <RichText text={plan.market.outlook} />
                   <p className="agent-card__muted">{plan.market.riskNotes}</p>
                   <ul className="agent-card__list">
@@ -169,7 +165,7 @@ export function MultiAgentPlanPanel() {
                 </section>
 
                 <section className="card agent-card agent-card--health">
-                  <h3 className="agent-card__title">Health agent</h3>
+                  <h3 className="agent-card__title">Health Monitoring</h3>
                   <ul className="agent-card__list agent-card__list--rich">
                     {plan.health.scoutingPlan.map((w, i) => (
                       <li key={i}>
@@ -191,23 +187,6 @@ export function MultiAgentPlanPanel() {
         </div>
       </div>
 
-      <footer className="multi-agent__api card dev-hint">
-        <h3 className="dev-hint__title">Backend contract (three routes)</h3>
-        <ul className="dev-hint__list">
-          <li>
-            <code>POST /api/v1/agents/suitability/analyze</code> — body:{" "}
-            <code>{"{ context, candidateCrops? }"}</code>
-          </li>
-          <li>
-            <code>POST /api/v1/agents/market/forecast</code> — body:{" "}
-            <code>{"{ context, cropFocus, suitabilityTopScore? }"}</code>
-          </li>
-          <li>
-            <code>POST /api/v1/agents/health/monitoring-plan</code> — body:{" "}
-            <code>{"{ context, cropFocus, symptomsNote? }"}</code>
-          </li>
-        </ul>
-      </footer>
     </div>
   );
 }

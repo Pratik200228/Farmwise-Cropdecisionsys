@@ -152,16 +152,25 @@ def generate_suitability_report(context: FarmContext) -> SuitabilityResponse:
         ph_fit = range_fit(env.soilPh, profile["phRange"])
         s_fit = round(soil_type_fit * 0.6 + ph_fit * 0.4)
 
+
         base_score = round(t_fit * 0.28 + r_fit * 0.25 + s_fit * 0.22 + h_fit * 0.15 + w_fit * 0.1)
         confidence = clamp(0.55 + (min(t_fit, r_fit, s_fit) / 100) * 0.4 - (0.05 if env.soilMoisturePct < 20 else 0), 0.4, 0.98)
 
         # Apply ML Probabilities if available
         if ml_scores and profile["name"] in ml_scores:
             ml_prob = ml_scores[profile["name"]]
-            # ML output strongly dictates base_score
-            base_score = max(5, int(ml_prob * 100) + int(base_score * 0.2)) # Blend ML with rules fallback
+            # FIXED: Rebalance scoring weights (v2.1)
+            base_score = int((base_score * 0.65) + (ml_prob * 100 * 0.35))
             base_score = min(base_score, 100)
-            confidence = max(0.6, confidence + (ml_prob * 0.2))
+            confidence = min(0.99, max(0.6, confidence + (ml_prob * 0.15)))
+
+        # NEW: Penalize for critical environmental mismatches
+        penalty = 1.0
+        if t_fit < 55 or r_fit < 55 or s_fit < 55:
+            penalty = 0.7  # 30% penalty for any major mismatch
+        if t_fit < 40 or r_fit < 40 or s_fit < 40:
+            penalty = 0.0  # Disqualify if extremely poor fit
+        base_score = int(base_score * penalty)
 
         warnings = []
         if t_fit < 55: warnings.append("Temperature is outside the preferred band.")

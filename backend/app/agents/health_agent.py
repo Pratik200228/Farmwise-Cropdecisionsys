@@ -134,12 +134,14 @@ def analyze_plant_image(image_bytes: bytes) -> dict:
         
         if issue_clean.lower() == "healthy":
             return {
-                "status": "success",
-                "diagnosis": "Healthy",
                 "crop": crop,
-                "confidence": confidence,
-                "detailedIssues": [HEALTHY_RESPONSE],
-                "actionPlan": HEALTHY_RESPONSE["treatment"]
+                "growthStage": "Observed via image scan",
+                "healthScore": 90,
+                "overallSeverity": "healthy",
+                "issues": [HEALTHY_RESPONSE],
+                "scoutingPlan": ["Continue weekly visual scouting.", "Photograph canopy regularly."],
+                "source": "Image Diagnosis Scanner",
+                "generatedAt": int(time.time() * 1000)
             }
 
         mapped_issue = None
@@ -154,7 +156,7 @@ def analyze_plant_image(image_bytes: bytes) -> dict:
                 "kind": mapped_issue["kind"],
                 "severity": mapped_issue["severity"],
                 "probability": confidence,
-                "symptoms": [f"CNN visually identified {issue_clean}"],
+                "symptoms": [f"Visual evidence indicates matching characteristics of {issue_clean}"],
                 "treatment": mapped_issue["treatment"],
                 "preventive": mapped_issue["preventive"]
             }
@@ -169,13 +171,18 @@ def analyze_plant_image(image_bytes: bytes) -> dict:
                 "preventive": ["Improve airflow", "Avoid overhead watering"]
             }
 
+        overall = response_issue["severity"]
+        health_score = _severity_to_score(overall)
+        
         return {
-            "status": "success",
-            "diagnosis": issue_clean.title(),
             "crop": crop,
-            "confidence": confidence,
-            "detailedIssues": [response_issue],
-            "actionPlan": response_issue["treatment"]
+            "growthStage": "Observed via image scan",
+            "healthScore": health_score,
+            "overallSeverity": overall,
+            "issues": [response_issue],
+            "scoutingPlan": [f"Isolate spread of {issue_clean}.", "Re-scan leaves every 3 days."],
+            "source": "Image Diagnosis Scanner",
+            "generatedAt": int(time.time() * 1000)
         }
     except Exception as e:
         return {"error": f"Failed to process image: {str(e)}"}

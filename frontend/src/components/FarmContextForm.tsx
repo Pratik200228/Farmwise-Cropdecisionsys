@@ -1,4 +1,4 @@
-import type { FarmContext, FarmGoal } from "../types/farm";
+import { deriveEnvironment, type FarmContext, type FarmGoal } from "../types/farm";
 
 const goals: { value: FarmGoal; label: string }[] = [
   { value: "yield", label: "Yield" },
@@ -13,15 +13,20 @@ type Props = {
 };
 
 export function FarmContextForm({ value, onChange }: Props) {
-  const patch = (partial: Partial<FarmContext>) =>
-    onChange({ ...value, ...partial });
+  const patch = (partial: Partial<FarmContext>) => {
+    const next = { ...value, ...partial };
+    // Automatically re-derive the hidden environment based on region/season
+    if ("region" in partial || "season" in partial) {
+      next.env = deriveEnvironment(next.season, next.region);
+    }
+    onChange(next);
+  };
 
   return (
     <div className="farm-context">
       <h2 className="farm-context__title">Farm context</h2>
       <p className="farm-context__hint">
-        The advisor sends this JSON with every chat request so the model stays
-        grounded in your operation.
+        Select your environmental criteria to ground the intelligence models in your local constraints.
       </p>
 
       <label className="field">
@@ -86,7 +91,7 @@ export function FarmContextForm({ value, onChange }: Props) {
         <input
           className="field__input"
           type="text"
-          placeholder="kharif / rabi / dry season"
+          placeholder="e.g. Spring / Summer / Fall / Winter"
           value={value.season}
           onChange={(e) => patch({ season: e.target.value })}
         />

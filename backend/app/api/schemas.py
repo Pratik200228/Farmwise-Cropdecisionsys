@@ -4,17 +4,17 @@ from pydantic import BaseModel, Field
 
 # --- Inputs --- #
 class Environment(BaseModel):
-    temperatureC: float
-    humidityPct: float
-    windKph: float
-    rainfallMm: float
-    soilPh: float
-    soilMoisturePct: float
+    temperatureC: float = Field(..., ge=-10, le=55)
+    humidityPct: float = Field(..., ge=0, le=100)
+    windKph: float = Field(..., ge=0, le=150)
+    rainfallMm: float = Field(..., ge=0, le=2000)
+    soilPh: float = Field(..., ge=1.0, le=14.0)
+    soilMoisturePct: float = Field(..., ge=0, le=100)
 
 class FarmContext(BaseModel):
-    region: str
+    region: str = Field(..., min_length=2, max_length=100)
     soilType: str
-    farmSizeAcres: float
+    farmSizeAcres: float = Field(..., ge=0.0)
     primaryGoal: Literal["yield", "profit", "sustainability", "mixed"]
     season: str
     notes: str
@@ -23,6 +23,17 @@ class FarmContext(BaseModel):
 class SuitabilityRequest(BaseModel):
     context: FarmContext
     candidateCrops: Optional[List[str]] = None
+
+class AdvisorMessage(BaseModel):
+    role: Literal["user", "system", "assistant"]
+    content: str
+
+class AdvisorRequest(BaseModel):
+    messages: List[AdvisorMessage]
+    context: FarmContext
+
+class AdvisorResponse(BaseModel):
+    reply: str
 
 # --- Outputs --- #
 class FitScores(BaseModel):

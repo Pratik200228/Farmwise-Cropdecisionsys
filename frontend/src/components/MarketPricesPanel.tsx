@@ -64,17 +64,15 @@ export function MarketPricesPanel() {
     <div className="market-page">
       <header className="page-head">
         <div>
-          <div className="page-head__kicker">Agent 2 of 3 · AI agent</div>
-          <h1 className="page-head__title">Market Intelligence Agent</h1>
+          <div className="page-head__kicker">Farm Intelligence</div>
+          <h1 className="page-head__title">Market Forecaster</h1>
           <p className="page-head__sub">
-            Utility-based agent — blends USDA / commodity-API price history
-            with seasonal models to recommend the sell windows that maximize
-            farmer margin.
+            Correlates historical crop pricing data with seasonal trends to recommend optimal sell windows.
           </p>
           <AgentBadge
             accent="market"
-            name="Agent 2 · Market Intelligence"
-            type="utility-based"
+            name="Yield Economics"
+            type="Predictive Pricing"
             role="Maximizes expected profit by ranking sell windows against a seasonal median."
           />
         </div>
@@ -191,7 +189,6 @@ export function MarketPricesPanel() {
           <section className="card market-summary">
             <h2 className="market-summary__title">What this means</h2>
             <RichText text={report.summary} />
-            <p className="market-summary__source">Source: {report.source}</p>
           </section>
 
           <section className="card market-windows">

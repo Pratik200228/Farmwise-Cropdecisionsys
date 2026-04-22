@@ -103,17 +103,16 @@ export function CropSuitabilityAgentPanel() {
     <div className="suit-page">
       <header className="page-head">
         <div>
-          <div className="page-head__kicker">Agent 1 of 3 · AI agent</div>
-          <h1 className="page-head__title">Crop Suitability Agent</h1>
+          <div className="page-head__kicker">Farm Intelligence</div>
+          <h1 className="page-head__title">Crop Suitability Forecaster</h1>
           <p className="page-head__sub">
-            Goal-based agent — ranks crops by how well they fit the current
-            weather, soil and season. Tune the inputs on the right and re-run
-            any time.
+            Ranks candidate crops by correlating historical yields with current weather, 
+            soil conditions, and seasonal parameters. 
           </p>
           <AgentBadge
             accent="suit"
-            name="Agent 1 · Crop Suitability"
-            type="goal-based"
+            name="Environmental Modeling"
+            type="Agronomic Core"
             role="Maximizes expected yield by matching crop requirements to environmental inputs."
           />
         </div>
@@ -123,7 +122,7 @@ export function CropSuitabilityAgentPanel() {
           onClick={() => void run()}
           disabled={running}
         >
-          {running ? "Running agent…" : report ? "Re-run agent" : "Run agent"}
+          {running ? "Running…" : report ? "Re-run forecast" : "Run forecast"}
         </button>
       </header>
 

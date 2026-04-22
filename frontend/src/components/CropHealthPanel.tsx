@@ -86,6 +86,11 @@ export function CropHealthPanel() {
   const handleImageChange = (e: ChangeEvent<HTMLInputElement>) => {
     if (e.target.files && e.target.files[0]) {
       const file = e.target.files[0];
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Image size exceeds 5MB limit. Please upload a smaller scan.");
+        return;
+      }
+      setError(null);
       setImageFile(file);
       setPreviewUrl(URL.createObjectURL(file));
       setSymptoms(""); // Clear text symptoms if image is uploaded
@@ -131,20 +136,12 @@ export function CropHealthPanel() {
     <div className="health-page">
       <header className="page-head">
         <div>
-          <div className="page-head__kicker">Agent 3 of 3 · AI agent</div>
-          <h1 className="page-head__title">Crop Health Agent</h1>
+          <div className="page-head__kicker">Farm Intelligence</div>
+          <h1 className="page-head__title">Crop Health Scanner</h1>
           <p className="page-head__sub">
-            Model-based reflex agent — reads symptom descriptions (and later
-            images via PlantVillage / Plantix) to classify likely diseases,
-            pests, and nutrient issues with treatment steps you can act on
-            today.
+            Identify diseases, pests, and nutrient issues instantly. 
+            Upload a photo or describe symptoms to receive real-time treatment protocols.
           </p>
-          <AgentBadge
-            accent="health"
-            name="Agent 3 · Crop Health"
-            type="model-based"
-            role="Identifies crop stress from symptoms and percepts, then recommends scouting and treatment."
-          />
         </div>
       </header>
 
@@ -309,7 +306,6 @@ export function CropHealthPanel() {
                   <p className="health-hero__sub">
                     Overall health score for the observed symptoms.
                   </p>
-                  <p className="health-hero__source">Source: {report.source}</p>
                 </div>
               </section>
 

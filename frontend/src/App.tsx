@@ -22,23 +22,23 @@ type NavItem = {
 };
 
 const NAV: NavItem[] = [
-  { key: "overview", label: "Overview", hint: "All 3 agents", icon: "▦" },
+  { key: "overview", label: "Overview", hint: "Farm dashboard", icon: "▦" },
   {
     key: "suitability",
     label: "Crop Suitability",
-    hint: "Agent 1 · goal-based",
+    hint: "Yield & conditions",
     icon: "✦",
   },
   {
     key: "market",
     label: "Market Intelligence",
-    hint: "Agent 2 · utility-based",
+    hint: "Price & timing",
     icon: "$",
   },
   {
     key: "health",
     label: "Crop Health",
-    hint: "Agent 3 · model-based",
+    hint: "Disease monitoring",
     icon: "✚",
   },
   { key: "multi", label: "Season Plan", hint: "Orchestrator", icon: "⋈" },
@@ -80,16 +80,6 @@ export default function App() {
           ))}
         </nav>
 
-        <footer className="sidebar__foot">
-          <div className="sidebar__status">
-            <span className="sidebar__dot" aria-hidden />
-            <span>Demo mode · mock APIs</span>
-          </div>
-          <p>
-            Three AI agents — Suitability, Market Intelligence, Crop Health —
-            plus an orchestrator that runs them together as a season plan.
-          </p>
-        </footer>
       </aside>
 
       <main className="main">
