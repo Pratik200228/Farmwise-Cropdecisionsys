@@ -1,0 +1,15 @@
+# Render Blueprint — https://docs.render.com/infrastructure-as-code
+# Dashboard: New → Blueprint → connect GitHub repo with this file, or create Web Service manually with same settings.
+services:
+  - type: web
+    name: farmwise-api
+    runtime: python
+    plan: free
+    region: oregon
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.1"
