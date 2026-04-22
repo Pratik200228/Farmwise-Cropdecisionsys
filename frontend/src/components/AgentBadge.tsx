@@ -1,9 +1,9 @@
 export type AgentType =
   | "goal-based"
-  | "utility-based"
   | "model-based"
-  | "orchestrator"
-  | "conversational";
+  | "api-service"
+  | "integration"
+  | "assistant";
 
 type Props = {
   name: string;
@@ -14,15 +14,15 @@ type Props = {
 
 const TYPE_LABEL: Record<AgentType, string> = {
   "goal-based": "Goal-based agent",
-  "utility-based": "Utility-based agent",
-  "model-based": "Model-based reflex agent",
-  orchestrator: "Orchestrator",
-  conversational: "Conversational agent",
+  "model-based": "Model-based agent",
+  "api-service": "External API service",
+  integration: "Integrated workflow",
+  assistant: "Decision-support assistant",
 };
 
 export function AgentBadge({ name, type, role, accent }: Props) {
   return (
-    <aside className={`agent-badge agent-badge--${accent}`} aria-label="Agent profile">
+    <aside className={`agent-badge agent-badge--${accent}`} aria-label="Profile">
       <span className="agent-badge__kicker">{name}</span>
       <strong className="agent-badge__type">{TYPE_LABEL[type]}</strong>
       <span className="agent-badge__role">{role}</span>

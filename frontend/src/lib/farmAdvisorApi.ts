@@ -1,12 +1,7 @@
 import type { ChatMessage, FarmContext } from "../types/farm";
+import { buildApiUrl, isMockAiEnabled } from "./runtimeConfig";
 
 const ADVISOR_PATH = "/api/v1/farm-advisor/chat";
-
-function apiBase(): string {
-  const raw = import.meta.env.VITE_API_BASE_URL;
-  if (raw && raw.length > 0) return raw.replace(/\/$/, "");
-  return "";
-}
 
 export type AdvisorRequestBody = {
   messages: { role: "user" | "assistant" | "system"; content: string }[];
@@ -17,10 +12,6 @@ export type AdvisorResponseBody = {
   reply?: string;
   message?: string;
 };
-
-function useMock(): boolean {
-  return import.meta.env.VITE_USE_MOCK_AI === "true";
-}
 
 function lastUserText(messages: ChatMessage[]): string {
   for (let i = messages.length - 1; i >= 0; i--) {
@@ -61,20 +52,17 @@ export async function sendFarmAdvisorMessage(
   messages: ChatMessage[],
   context: FarmContext,
 ): Promise<string> {
-  if (useMock()) {
+  if (isMockAiEnabled()) {
     await new Promise((r) => setTimeout(r, 600));
     return mockAdvisorReply(messages, context);
   }
-
-  const base = apiBase();
-  const url = base ? `${base}${ADVISOR_PATH}` : ADVISOR_PATH;
 
   const body: AdvisorRequestBody = {
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
     context,
   };
 
-  const res = await fetch(url, {
+  const res = await fetch(buildApiUrl(ADVISOR_PATH), {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
