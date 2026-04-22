@@ -1,7 +1,7 @@
 import { useState, type FormEvent, type ChangeEvent } from "react";
 import { runHealthMonitoring, runHealthScan, supportedMarketCrops } from "../lib/insightsApi";
 import type { HealthIssue, HealthReport } from "../types/insights";
-import { AgentBadge } from "./AgentBadge";
+import type { HealthIssue, HealthReport } from "../types/insights";
 
 const GROWTH_STAGES = [
   "seedling",
