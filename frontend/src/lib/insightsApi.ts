@@ -640,7 +640,7 @@ export async function runHealthScan(file: File): Promise<HealthReport> {
   const formData = new FormData();
   formData.append("file", file);
 
-  const res = await fetch(`${API_BASE}${PATHS.health.replace('/monitoring', '/scan')}`, {
+  const res = await fetch(url(PATHS.health.replace("/monitoring", "/scan")), {
     method: "POST",
     body: formData,
   });

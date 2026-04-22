@@ -1,5 +1,6 @@
 export type AgentType =
   | "goal-based"
+  | "model-based"
   | "api-service"
   | "integration"
   | "assistant";
@@ -13,6 +14,7 @@ type Props = {
 
 const TYPE_LABEL: Record<AgentType, string> = {
   "goal-based": "Goal-based agent",
+  "model-based": "Model-based agent",
   "api-service": "External API service",
   integration: "Integrated workflow",
   assistant: "Decision-support assistant",

@@ -3,4 +3,9 @@ uvicorn[standard]
 python-dotenv
 pydantic
 pandas
+numpy
 scikit-learn
+joblib
+pillow
+tensorflow
+requests
