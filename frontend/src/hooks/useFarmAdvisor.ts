@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { mockAdvisorReply, sendFarmAdvisorMessage } from "../lib/farmAdvisorApi";
 import type { ChatMessage, FarmContext } from "../types/farm";
 
@@ -17,8 +17,13 @@ export function useFarmAdvisor(initialContext: FarmContext) {
       createdAt: Date.now(),
     },
   ]);
+  const messagesRef = useRef<ChatMessage[]>(messages);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    messagesRef.current = messages;
+  }, [messages]);
 
   const send = useCallback(
     async (text: string) => {
@@ -32,14 +37,10 @@ export function useFarmAdvisor(initialContext: FarmContext) {
         createdAt: Date.now(),
       };
 
-      let threadForApi: ChatMessage[] = [];
-
       setError(null);
       setPending(true);
-      setMessages((prev) => {
-        threadForApi = [...prev, userMsg];
-        return threadForApi;
-      });
+      const threadForApi = [...messagesRef.current, userMsg];
+      setMessages(threadForApi);
 
       try {
         const reply = await sendFarmAdvisorMessage(threadForApi, context);

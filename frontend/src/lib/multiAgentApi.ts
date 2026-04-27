@@ -9,6 +9,7 @@ import type {
   SuitabilityAgentResult,
   SuitabilityRequestBody,
 } from "../types/agents";
+import { buildApiUrl, isMockAiEnabled } from "./runtimeConfig";
 
 const PATHS = {
   suitability: "/api/v1/agents/suitability/analyze",
@@ -16,19 +17,12 @@ const PATHS = {
   health: "/api/v1/health/monitoring",
 } as const;
 
-function apiBase(): string {
-  const raw = import.meta.env.VITE_API_BASE_URL;
-  if (raw && raw.length > 0) return raw.replace(/\/$/, "");
-  return "";
-}
-
 function useMock(): boolean {
-  return import.meta.env.VITE_USE_MOCK_AI === "true";
+  return isMockAiEnabled();
 }
 
 function url(path: string): string {
-  const base = apiBase();
-  return base ? `${base}${path}` : path;
+  return buildApiUrl(path);
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
@@ -56,7 +50,7 @@ function mockSuitability(context: FarmContext): SuitabilityAgentResult {
     environmentalSummary: `For **${region}**, **${season}** on **${context.soilType}** soil, the agent weights temperature stress, rainfall reliability, and soil water holding capacity. Goal: **${context.primaryGoal}**.`,
     rankedCrops: [
       {
-        name: "Maize",
+        name: "Corn",
         score: 88,
         rationale: "Strong fit for warm-season growth and local demand; matches typical kharif moisture.",
       },
@@ -225,7 +219,7 @@ export async function runMultiAgentSeasonPlan(
     throw new Error(msg);
   }
 
-  const focusCrop = suitability.rankedCrops[0]?.name ?? "Maize";
+  const focusCrop = suitability.rankedCrops[0]?.name ?? "Corn";
   const topScore = suitability.rankedCrops[0]?.score ?? 0;
 
   update("market", "running");

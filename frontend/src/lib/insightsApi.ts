@@ -9,6 +9,7 @@ import type {
   SellingWindow,
   SuitabilityReport,
 } from "../types/insights";
+import { buildApiUrl, isMockAiEnabled } from "./runtimeConfig";
 
 /* -------------------------------------------------------------------------- */
 /*  Shared helpers                                                            */
@@ -20,21 +21,12 @@ const PATHS = {
   health: "/api/v1/health/monitoring",
 } as const;
 
-function apiBase(): string {
-  const raw = import.meta.env.VITE_API_BASE_URL;
-  if (raw && raw.length > 0) return raw.replace(/\/$/, "");
-  return "";
-}
-
 function useMock(): boolean {
-  // default to mock when the var is unset — keeps the UI demo-able out of the box
-  const v = import.meta.env.VITE_USE_MOCK_AI;
-  return v === undefined || v === "" || v === "true";
+  return isMockAiEnabled();
 }
 
 function url(path: string): string {
-  const base = apiBase();
-  return base ? `${base}${path}` : path;
+  return buildApiUrl(path);
 }
 
 async function postJson<T>(path: string, body: unknown): Promise<T> {
@@ -91,7 +83,7 @@ type CropProfile = {
 
 const CROP_CATALOG: CropProfile[] = [
   {
-    name: "Maize",
+    name: "Corn",
     tempC: [18, 32],
     humidityPct: [40, 80],
     rainMm: [120, 400],
@@ -298,10 +290,10 @@ function mockSuitability(context: FarmContext): SuitabilityReport {
   ].join(" ");
 
   const rotationSuggestion =
-    top.name === "Maize" || top.name === "Rice"
+    top.name === "Corn" || top.name === "Rice"
       ? `Follow ${top.name} with a legume (lentil, soybean) next cycle to restore nitrogen.`
       : top.name === "Wheat"
-        ? `Follow wheat with maize or soybean in the next cycle to break disease chains.`
+        ? `Follow wheat with corn or soybean in the next cycle to break disease chains.`
         : top.name === "Tomato" || top.name === "Potato"
           ? `Rotate out of solanaceae next season — mustard or lentil breaks disease pressure.`
           : `Rotate with a cereal next cycle to balance soil nutrition.`;
@@ -338,7 +330,7 @@ type MarketSeed = {
 };
 
 const MARKET_SEEDS: Record<string, MarketSeed> = {
-  Maize: { base: 42, unit: "USD/quintal", noise: 2.4, drift: 0.8 },
+  Corn: { base: 42, unit: "USD/quintal", noise: 2.4, drift: 0.8 },
   Rice: { base: 68, unit: "USD/quintal", noise: 3.0, drift: 0.6 },
   Wheat: { base: 55, unit: "USD/quintal", noise: 2.0, drift: 0.4 },
   Lentil: { base: 98, unit: "USD/quintal", noise: 4.5, drift: 1.2 },
@@ -362,7 +354,7 @@ function pseudoRandom(seedStr: string): () => number {
 }
 
 function mockMarket(crop: string): MarketReport {
-  const seed = MARKET_SEEDS[crop] ?? MARKET_SEEDS.Maize;
+  const seed = MARKET_SEEDS[crop] ?? MARKET_SEEDS.Corn;
   const rnd = pseudoRandom(crop + ":v2");
 
   const trend: PricePoint[] = [];

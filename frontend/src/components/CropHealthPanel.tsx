@@ -131,6 +131,10 @@ export function CropHealthPanel() {
     void run(preset);
   };
 
+  const needsExpert =
+    report?.overallSeverity === "severe" ||
+    !!report?.issues.some((i) => i.severity === "severe" && i.probability >= 0.7);
+
   return (
     <div className="health-page">
       <header className="page-head">
@@ -273,6 +277,17 @@ export function CropHealthPanel() {
 
           {report ? (
             <>
+              {needsExpert ? (
+                <section className="card panel-error" style={{ marginBottom: "0.9rem" }}>
+                  <strong>Urgent: expert support recommended</strong>
+                  <p style={{ marginTop: "0.35rem" }}>
+                    This scan indicates a high-severity plant health risk. Please contact a local
+                    agronomist or plant pathologist as soon as possible, especially if symptoms are
+                    spreading across multiple rows.
+                  </p>
+                </section>
+              ) : null}
+
               <section className={`card health-hero health-hero--${report.overallSeverity}`}>
                 <div className="health-hero__meter" aria-hidden>
                   <svg viewBox="0 0 120 120" width="120" height="120">

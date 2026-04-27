@@ -19,7 +19,7 @@ except Exception as e:
 # Reference catalog adapted from the original Typescript logic to ensure feature parity
 CROP_CATALOG = [
     {
-        "name": "Maize",
+        "name": "Corn",
         "tempC": (18, 32),
         "humidityPct": (40, 80),
         "rainMm": (120, 400),
@@ -220,10 +220,10 @@ def generate_suitability_report(context: FarmContext) -> SuitabilityResponse:
 
     # Generate rotation suggestion dynamically
     r_sug = "Rotate with a cereal next cycle to balance soil nutrition."
-    if top.name in ["Maize", "Rice"]:
+    if top.name in ["Corn", "Rice"]:
         r_sug = f"Follow {top.name} with a legume (lentil, soybean) next cycle to restore nitrogen."
     elif top.name == "Wheat":
-        r_sug = f"Follow wheat with maize or soybean in the next cycle to break disease chains."
+        r_sug = f"Follow wheat with corn or soybean in the next cycle to break disease chains."
     elif top.name in ["Tomato", "Potato"]:
         r_sug = "Rotate out of solanaceae next season - mustard or lentil breaks disease pressure."
 

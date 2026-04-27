@@ -41,7 +41,7 @@ export function OverviewDashboard({ onNavigate }: Props) {
         const s = await runCropSuitabilityAgent(defaultFarmContext());
         if (cancelled) return;
         setSuit(s);
-        const focus = s.crops[0]?.name ?? "Maize";
+        const focus = s.crops[0]?.name ?? "Corn";
         const [m, h] = await Promise.all([
           fetchMarketForecast(focus),
           runHealthMonitoring(focus, "vegetative", ""),

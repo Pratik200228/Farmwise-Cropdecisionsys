@@ -9,6 +9,12 @@ numpy
 scikit-learn>=1.6.1,<1.7.0
 joblib
 pillow
-# CPU build: reliable on Windows/macOS/Linux without CUDA; sufficient for CNN inference
-tensorflow-cpu>=2.16,<2.20
+# Plant disease classifier uses public PlantVillage MobileNetV2 (PyTorch) checkpoint.
+# Install CPU wheels via: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
+torch>=2.1
+torchvision>=0.16
+# Layer 2 cereal specialist (rice/wheat ViT from HF Hub)
+transformers>=4.41
+safetensors>=0.4
+huggingface_hub>=0.23
 requests

@@ -1,40 +1,215 @@
 """
-Crop Health Monitoring Agent
-Uses MobileNetV2 CNN trained on PlantVillage dataset for disease detection,
-with a fallback to a rule-based expert system for text-based symptoms.
+Crop Health Monitoring Agent.
+
+Image classification uses a known-good public PlantVillage MobileNetV2
+checkpoint (Daksh159/plant-disease-mobilenetv2 on Hugging Face), trained
+on the New Plant Diseases Dataset (Augmented) - 38 classes, 95% val acc.
+Text-symptom diagnosis uses a curated rule-based expert system.
 """
 
-import re
-import time
-import os
 import io
 import logging
-from typing import List
-from PIL import Image
+import os
+import re
+import time
+from typing import List, Optional, Tuple
+
 import numpy as np
+from PIL import Image
 
-# Load ML models
-os.environ["TF_CPP_MIN_LOG_LEVEL"] = "2"
+logger = logging.getLogger(__name__)
+
+
+_TORCH_OK = True
 try:
-    import tensorflow as tf
-    import joblib
+    import torch
+    import torch.nn as nn
+    from torchvision import models, transforms
+except Exception as exc:
+    logger.warning("PyTorch unavailable, image scan disabled: %s", exc)
+    _TORCH_OK = False
 
-    MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
-    CNN_MODEL_PATH = os.path.join(MODEL_DIR, "plant_disease_model.h5")
-    CNN_CLASSES_PATH = os.path.join(MODEL_DIR, "disease_class_names.pkl")
 
-    if os.path.exists(CNN_MODEL_PATH) and os.path.exists(CNN_CLASSES_PATH):
-        CNN_MODEL = tf.keras.models.load_model(CNN_MODEL_PATH)
-        CNN_CLASSES = joblib.load(CNN_CLASSES_PATH)
-    else:
-        CNN_MODEL = None
-        CNN_CLASSES = []
-except Exception as e:
-    logging.warning(f"Could not load Health CNN model: {e}")
-    CNN_MODEL = None
-    CNN_CLASSES = []
+MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
+TORCH_MODEL_PATH = os.path.join(MODEL_DIR, "mobilenetv2_plant.pth")
+CLASSES_PATH = os.path.join(MODEL_DIR, "disease_class_names.pkl")
+CEREAL_VIT_DIR = os.path.join(MODEL_DIR, "crop_leaf_vit")
 
-# Disease Knowledge Base (Fallback for text & Treatment Mappings)
+
+def _load_class_names() -> List[str]:
+    try:
+        import joblib
+        if os.path.exists(CLASSES_PATH):
+            classes = joblib.load(CLASSES_PATH)
+            if isinstance(classes, (list, tuple)) and len(classes) == 38:
+                return list(classes)
+    except Exception as exc:
+        logger.warning("Failed to load class names pkl: %s", exc)
+    # Standard alphabetical PlantVillage 38-class order
+    return [
+        "Apple___Apple_scab", "Apple___Black_rot", "Apple___Cedar_apple_rust", "Apple___healthy",
+        "Blueberry___healthy",
+        "Cherry_(including_sour)___Powdery_mildew", "Cherry_(including_sour)___healthy",
+        "Corn_(maize)___Cercospora_leaf_spot Gray_leaf_spot",
+        "Corn_(maize)___Common_rust_", "Corn_(maize)___Northern_Leaf_Blight", "Corn_(maize)___healthy",
+        "Grape___Black_rot", "Grape___Esca_(Black_Measles)",
+        "Grape___Leaf_blight_(Isariopsis_Leaf_Spot)", "Grape___healthy",
+        "Orange___Haunglongbing_(Citrus_greening)",
+        "Peach___Bacterial_spot", "Peach___healthy",
+        "Pepper,_bell___Bacterial_spot", "Pepper,_bell___healthy",
+        "Potato___Early_blight", "Potato___Late_blight", "Potato___healthy",
+        "Raspberry___healthy", "Soybean___healthy",
+        "Squash___Powdery_mildew",
+        "Strawberry___Leaf_scorch", "Strawberry___healthy",
+        "Tomato___Bacterial_spot", "Tomato___Early_blight", "Tomato___Late_blight",
+        "Tomato___Leaf_Mold", "Tomato___Septoria_leaf_spot",
+        "Tomato___Spider_mites Two-spotted_spider_mite",
+        "Tomato___Target_Spot", "Tomato___Tomato_Yellow_Leaf_Curl_Virus",
+        "Tomato___Tomato_mosaic_virus", "Tomato___healthy",
+    ]
+
+
+CLASS_NAMES: List[str] = _load_class_names()
+
+
+# --- Crop coverage gate -----------------------------------------------------
+# These are the crops the public PlantVillage MobileNetV2 model can actually
+# diagnose diseases for. If a farmer picks anything outside this set, image
+# scan is gated off and we ask them to use the text path or contact an expert.
+
+DISEASE_CAPABLE_CROPS = {
+    "apple", "cherry", "corn", "grape", "orange",
+    "peach", "pepper", "potato", "squash", "strawberry", "tomato",
+}
+
+# Crops served by the secondary cereal ViT (Layer 2):
+# wambugu71/crop_leaf_diseases_vit covers rice + wheat (and also corn/potato,
+# but PlantVillage handles those better, so we only route rice/wheat here).
+CEREAL_VIT_CROPS = {"rice", "wheat"}
+
+# Model has only "healthy" class for these - it can confirm a healthy leaf
+# but cannot reliably detect any disease. Treat as gated for image scan.
+HEALTH_ONLY_CROPS = {"blueberry", "raspberry", "soybean"}
+
+# Common aliases / vernacular names farmers may pick from the UI.
+CROP_ALIASES = {
+    "maize": "corn",
+    "bell pepper": "pepper",
+    "bell_pepper": "pepper",
+    "capsicum": "pepper",
+    "chilli": "pepper",
+    "chili": "pepper",
+    "paddy": "rice",
+    "brinjal": "eggplant",
+}
+
+
+def _normalize_crop(crop: Optional[str]) -> str:
+    if not crop:
+        return ""
+    key = crop.strip().lower().replace("(", "").replace(")", "").strip()
+    return CROP_ALIASES.get(key, key)
+
+
+def _build_unsupported_response(crop_label: str, stage_hint: Optional[str], reason: str) -> dict:
+    return {
+        "crop": crop_label,
+        "growthStage": stage_hint or "Observed via image scan",
+        "healthScore": 70,
+        "overallSeverity": "watch",
+        "issues": [{
+            "name": f"Image scan not available for {crop_label}",
+            "kind": "disease",
+            "severity": "watch",
+            "probability": 0.0,
+            "symptoms": [
+                reason,
+                "Running the model anyway would force a wrong label from a different crop family.",
+            ],
+            "treatment": [
+                f"Switch to the text-symptom flow and describe what you see on your {crop_label}.",
+                "Capture clear photos of affected and healthy leaves for an agronomist visit.",
+            ],
+            "preventive": [
+                "Consult a local extension officer or plant pathologist for confirmation.",
+                "Track symptom spread daily until you get expert diagnosis.",
+            ],
+        }],
+        "scoutingPlan": [
+            f"Image-based diagnosis for {crop_label} is not supported by the current model.",
+            "Use the text-symptom path, or contact a local agronomist within 24-48 hours.",
+        ],
+        "source": "Crop-coverage gate (model not trained on this crop)",
+        "generatedAt": int(time.time() * 1000),
+    }
+
+
+_MODEL = None
+_TRANSFORM = None
+_CEREAL_MODEL = None
+_CEREAL_PROCESSOR = None
+_CEREAL_ID2LABEL: dict = {}
+
+
+def _build_cereal_model():
+    """Lazy-load the rice/wheat ViT (Layer 2 specialist)."""
+    global _CEREAL_MODEL, _CEREAL_PROCESSOR, _CEREAL_ID2LABEL
+    if _CEREAL_MODEL is not None:
+        return _CEREAL_MODEL
+    if not _TORCH_OK:
+        return None
+    if not os.path.isdir(CEREAL_VIT_DIR):
+        logger.warning("Cereal ViT directory not found at %s", CEREAL_VIT_DIR)
+        return None
+    try:
+        from transformers import AutoImageProcessor, AutoModelForImageClassification
+        proc = AutoImageProcessor.from_pretrained(CEREAL_VIT_DIR)
+        net = AutoModelForImageClassification.from_pretrained(CEREAL_VIT_DIR)
+        net.eval()
+        _CEREAL_MODEL = net
+        _CEREAL_PROCESSOR = proc
+        _CEREAL_ID2LABEL = {int(k): v for k, v in net.config.id2label.items()}
+        logger.info(
+            "Loaded cereal ViT (rice/wheat specialist) - %d classes", len(_CEREAL_ID2LABEL)
+        )
+        return _CEREAL_MODEL
+    except Exception as exc:
+        logger.exception("Failed to load cereal ViT: %s", exc)
+        return None
+
+
+def _build_model():
+    global _MODEL, _TRANSFORM
+    if not _TORCH_OK:
+        return None
+    if _MODEL is not None:
+        return _MODEL
+    if not os.path.exists(TORCH_MODEL_PATH):
+        logger.warning("MobileNetV2 plant model not found at %s", TORCH_MODEL_PATH)
+        return None
+    try:
+        net = models.mobilenet_v2(weights=None)
+        in_features = net.classifier[1].in_features
+        net.classifier[1] = nn.Sequential(
+            nn.Dropout(0.2),
+            nn.Linear(in_features, len(CLASS_NAMES)),
+        )
+        state = torch.load(TORCH_MODEL_PATH, map_location="cpu")
+        net.load_state_dict(state)
+        net.eval()
+        _MODEL = net
+        _TRANSFORM = transforms.Compose([
+            transforms.Resize((224, 224)),
+            transforms.ToTensor(),
+            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
+        ])
+        logger.info("Loaded plant disease MobileNetV2 (%d classes)", len(CLASS_NAMES))
+        return _MODEL
+    except Exception as exc:
+        logger.exception("Failed to load MobileNetV2 plant model: %s", exc)
+        return None
+
+
 HEALTH_RULES = [
     {
         "keywords": re.compile(r"yellow(ing)?|chloros|pale\s*lea", re.IGNORECASE),
@@ -42,8 +217,8 @@ HEALTH_RULES = [
         "kind": "nutrient",
         "severity": "watch",
         "symptoms": ["Uniform yellowing starting on older/lower leaves", "Stunted new growth"],
-        "treatment": ["Side-dress with urea (46-0-0) at 30–40 kg/ha", "Apply compost tea as a foliar spray"],
-        "preventive": ["Include legumes in crop rotation", "Conduct soil nitrogen test every 2 seasons"]
+        "treatment": ["Side-dress with urea (46-0-0) at 30-40 kg/ha", "Apply compost tea as a foliar spray"],
+        "preventive": ["Include legumes in crop rotation", "Conduct soil nitrogen test every 2 seasons"],
     },
     {
         "keywords": re.compile(r"brown\s*spot|blight|lesion|dark\s*spot|necrosi", re.IGNORECASE),
@@ -52,7 +227,7 @@ HEALTH_RULES = [
         "severity": "moderate",
         "symptoms": ["Dark brown concentric rings on leaves", "Yellow halo surrounding lesions"],
         "treatment": ["Remove and destroy all infected lower leaves", "Apply copper-based fungicide at label rate"],
-        "preventive": ["Mulch soil surface to prevent rain splash", "Water at soil level — avoid wetting foliage"]
+        "preventive": ["Mulch soil surface to prevent rain splash", "Water at soil level - avoid wetting foliage"],
     },
     {
         "keywords": re.compile(r"pwdery|mildew|white\s*film|dusty\s*lea", re.IGNORECASE),
@@ -61,7 +236,7 @@ HEALTH_RULES = [
         "severity": "moderate",
         "symptoms": ["White powdery coating on upper leaf surfaces", "Leaf curling"],
         "treatment": ["Apply sulfur dust or wettable sulfur", "Potassium bicarbonate spray"],
-        "preventive": ["Water at the base of the plant", "Space plants adequately for ventilation"]
+        "preventive": ["Water at the base of the plant", "Space plants adequately for ventilation"],
     },
     {
         "keywords": re.compile(r"rust|common\s*rust", re.IGNORECASE),
@@ -70,7 +245,7 @@ HEALTH_RULES = [
         "severity": "moderate",
         "symptoms": ["Orange, reddish-brown pustules on leaves", "Yellowing around pustules"],
         "treatment": ["Apply triazole-based fungicide at first sign", "Remove heavily infected leaves"],
-        "preventive": ["Use rust-resistant crop varieties", "Destroy crop debris after harvest"]
+        "preventive": ["Use rust-resistant crop varieties", "Destroy crop debris after harvest"],
     },
     {
         "keywords": re.compile(r"bacc?terial\s*spot", re.IGNORECASE),
@@ -79,7 +254,7 @@ HEALTH_RULES = [
         "severity": "severe",
         "symptoms": ["Small, water-soaked, greasy-looking spots", "Lesions turning brown/black"],
         "treatment": ["Apply copper bactericide mixed with mancozeb", "Prune infected branches immediately"],
-        "preventive": ["Use certified disease-free seeds", "Avoid working in fields when foliage is wet"]
+        "preventive": ["Use certified disease-free seeds", "Avoid working in fields when foliage is wet"],
     },
     {
         "keywords": re.compile(r"scab", re.IGNORECASE),
@@ -88,7 +263,7 @@ HEALTH_RULES = [
         "severity": "moderate",
         "symptoms": ["Rough, corky spots on fruit/tubers", "Olive-green spots on leaves"],
         "treatment": ["Apply captan or myclobutanil fungicide", "Adjust soil pH to be less favorable for scab"],
-        "preventive": ["Ensure adequate soil moisture during early tuber/fruit formation", "Apply compost to increase beneficial microbes"]
+        "preventive": ["Ensure adequate soil moisture during early tuber/fruit formation", "Apply compost"],
     },
     {
         "keywords": re.compile(r"mosaic", re.IGNORECASE),
@@ -96,9 +271,9 @@ HEALTH_RULES = [
         "kind": "disease",
         "severity": "severe",
         "symptoms": ["Mottled green/yellow leaves", "Curling or crinkling of leaves"],
-        "treatment": ["No cure; remove and destroy infected plants immediately", "Control aphids/whiteflies that spread the virus"],
-        "preventive": ["Use resistant varieties", "Sanitize tools with rubbing alcohol between plants"]
-    }
+        "treatment": ["No cure; remove and destroy infected plants immediately", "Control aphids/whiteflies"],
+        "preventive": ["Use resistant varieties", "Sanitize tools with rubbing alcohol between plants"],
+    },
 ]
 
 HEALTHY_RESPONSE = {
@@ -108,94 +283,424 @@ HEALTHY_RESPONSE = {
     "probability": 1.0,
     "symptoms": ["Canopy color uniform", "No visible lesions or pests"],
     "treatment": ["Continue weekly scouting"],
-    "preventive": ["Maintain current watering and nutrient schedules", "Log photos weekly for trend tracking"]
+    "preventive": ["Maintain current watering and nutrient schedules", "Log photos weekly for trend tracking"],
 }
 
-def analyze_plant_image(image_bytes: bytes, crop_hint: str = None, stage_hint: str = None) -> dict:
-    """Run the MobileNetV2 CNN on an uploaded leaf image."""
-    if CNN_MODEL is None or not CNN_CLASSES:
-        return {"error": "Machine learning model not loaded on backend."}
-    try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        image = image.resize((128, 128))
-        img_array = np.array(image) / 255.0
-        img_array = np.expand_dims(img_array, axis=0)
-        
-        predictions = CNN_MODEL.predict(img_array, verbose=0)[0]
-        max_idx = np.argmax(predictions)
-        confidence = float(predictions[max_idx])
-        predicted_class = CNN_CLASSES[max_idx]
-        
-        # Parse class: e.g. "Tomato___Early_blight" -> crop: "Tomato", issue: "Early_blight"
-        parts = predicted_class.split("___")
-        crop = parts[0].replace("_", " ") if len(parts) > 1 else (crop_hint or "Unknown")
-        issue_raw = parts[1] if len(parts) > 1 else predicted_class
-        issue_clean = issue_raw.replace("_", " ")
 
-        # If the model is very uncertain, trust the crop hint
-        if confidence < 0.4 and crop_hint:
-            crop = crop_hint
-        
-        if issue_clean.lower() == "healthy":
-            return {
-                "crop": crop,
-                "growthStage": stage_hint or "Observed via image scan",
-                "healthScore": 95,
-                "overallSeverity": "healthy",
-                "issues": [HEALTHY_RESPONSE],
-                "scoutingPlan": [f"Continue weekly visual scouting of {crop}.", "Photograph canopy regularly."],
-                "source": "Image Diagnosis Scanner",
-                "generatedAt": int(time.time() * 1000)
-            }
+def _severity_from_label(label: str) -> str:
+    lower = label.lower()
+    if "healthy" in lower:
+        return "healthy"
+    if any(k in lower for k in ["mosaic", "bacterial", "huanglongbing", "haunglongbing", "citrus_greening", "late_blight"]):
+        return "severe"
+    if any(k in lower for k in ["scab", "rust", "blight", "rot", "spot", "mildew", "leaf_mold", "scorch", "esca", "spider_mites", "target_spot", "yellow_leaf_curl"]):
+        return "moderate"
+    return "watch"
 
-        mapped_issue = None
-        for rule in HEALTH_RULES:
-            if rule["keywords"].search(issue_clean) or issue_clean.lower() in rule["name"].lower():
-                mapped_issue = rule
-                break
-        
-        if mapped_issue:
-            response_issue = {
-                "name": issue_clean.title(),
-                "kind": mapped_issue["kind"],
-                "severity": mapped_issue["severity"],
-                "probability": confidence,
-                "symptoms": [f"Visual evidence indicates matching characteristics of {issue_clean}"],
-                "treatment": mapped_issue["treatment"],
-                "preventive": mapped_issue["preventive"]
-            }
-        else:
-            response_issue = {
-                "name": issue_clean.title(),
-                "kind": "disease",
-                "severity": "moderate",
-                "probability": confidence,
-                "symptoms": [f"Visual indicators match {issue_clean}"],
-                "treatment": ["Monitor spread over next 48h.", "Isolate/prune degraded leaves.", f"Consult local agronomist regarding {issue_clean}."],
-                "preventive": ["Improve airflow", "Avoid overhead watering"]
-            }
-
-        overall = response_issue["severity"]
-        health_score = _severity_to_score(overall)
-        
-        return {
-            "crop": crop,
-            "growthStage": "Observed via image scan",
-            "healthScore": health_score,
-            "overallSeverity": overall,
-            "issues": [response_issue],
-            "scoutingPlan": [f"Isolate spread of {issue_clean}.", "Re-scan leaves every 3 days."],
-            "source": "Image Diagnosis Scanner",
-            "generatedAt": int(time.time() * 1000)
-        }
-    except Exception as e:
-        return {"error": f"Failed to process image: {str(e)}"}
 
 def _severity_to_score(severity: str) -> int:
     return {"healthy": 90, "watch": 72, "moderate": 55, "severe": 35}.get(severity, 70)
 
+
+def _humanize(label: str) -> Tuple[str, str]:
+    if "___" in label:
+        crop_part, disease_part = label.split("___", 1)
+    else:
+        crop_part, disease_part = "Unknown", label
+    crop = crop_part.replace("_", " ").replace("(", "(").strip()
+    disease = disease_part.replace("_", " ").strip().rstrip("_").strip()
+    return crop, disease or "Healthy"
+
+
+def _treatment_for(label: str) -> dict:
+    _, disease = _humanize(label)
+    for rule in HEALTH_RULES:
+        if rule["keywords"].search(disease):
+            return {
+                "name": disease.title(),
+                "kind": rule["kind"],
+                "treatment": rule["treatment"],
+                "preventive": rule["preventive"],
+            }
+    return {
+        "name": disease.title(),
+        "kind": "disease",
+        "treatment": [
+            "Isolate affected plants and remove diseased tissue.",
+            "Improve airflow and avoid overhead watering.",
+            "Confirm with a local agronomist before targeted chemical control.",
+        ],
+        "preventive": ["Rotate crops next cycle", "Use certified disease-free seed/seedlings"],
+    }
+
+
+def _analyze_with_cereal_vit(
+    image_bytes: bytes,
+    crop_label: str,
+    crop_norm: str,
+    stage_hint: Optional[str],
+) -> dict:
+    """Layer 2 path: rice / wheat specialist (ViT).
+
+    The ViT predicts crop+disease jointly across {corn, potato, rice, wheat}.
+    We filter probabilities down to just the user-selected crop's classes so
+    the answer is always coherent with the dropdown selection.
+    """
+    net = _build_cereal_model()
+    if net is None or _CEREAL_PROCESSOR is None:
+        return {"error": "Cereal disease model not loaded on backend."}
+    try:
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        inputs = _CEREAL_PROCESSOR(images=image, return_tensors="pt")
+        with torch.no_grad():
+            outputs = net(**inputs)
+            full_probs = torch.softmax(outputs.logits, dim=1)[0].cpu().numpy()
+    except Exception as exc:
+        return {"error": f"Failed to process image: {exc}"}
+
+    crop_prefix = crop_norm.capitalize() + "___"  # e.g. "Rice___"
+    crop_indices = [
+        i for i, lbl in _CEREAL_ID2LABEL.items() if lbl.startswith(crop_prefix)
+    ]
+    invalid_idx = next(
+        (i for i, lbl in _CEREAL_ID2LABEL.items() if lbl == "Invalid"), None
+    )
+
+    invalid_prob = float(full_probs[invalid_idx]) if invalid_idx is not None else 0.0
+    crop_total = float(sum(full_probs[i] for i in crop_indices)) if crop_indices else 0.0
+    other_crop_total = float(1.0 - crop_total - invalid_prob)
+
+    if invalid_prob > 0.6 or (crop_total < 0.20 and invalid_prob > 0.3):
+        return {
+            "crop": crop_label,
+            "growthStage": stage_hint or "Observed via image scan",
+            "healthScore": 60,
+            "overallSeverity": "watch",
+            "issues": [{
+                "name": "Image not recognized as a crop leaf",
+                "kind": "disease",
+                "severity": "watch",
+                "probability": invalid_prob,
+                "symptoms": [
+                    "The model classified this image as not a crop leaf.",
+                    "Common causes: blurry photo, soil/equipment in frame, wrong subject.",
+                ],
+                "treatment": [
+                    "Recapture a close-up of one affected leaf in good daylight.",
+                    "Hold the camera ~15-20 cm from the leaf, fill the frame.",
+                ],
+                "preventive": [
+                    "Take 2-3 photos of different affected leaves for cross-check.",
+                ],
+            }],
+            "scoutingPlan": [
+                f"Re-photograph {crop_label} leaves and rerun the scan.",
+            ],
+            "modelConfidence": round(invalid_prob, 3),
+            "topPredictions": [
+                {"label": "Not a leaf", "probability": round(invalid_prob, 3)},
+            ],
+            "source": "Cereal ViT (rice/wheat specialist) - non-leaf detected",
+            "generatedAt": int(time.time() * 1000),
+        }
+
+    if other_crop_total > 0.5 and crop_total < 0.3:
+        return {
+            "crop": crop_label,
+            "growthStage": stage_hint or "Observed via image scan",
+            "healthScore": 65,
+            "overallSeverity": "watch",
+            "issues": [{
+                "name": f"Photo doesn't appear to be a {crop_label} leaf",
+                "kind": "disease",
+                "severity": "watch",
+                "probability": other_crop_total,
+                "symptoms": [
+                    f"Visual signal is more consistent with another crop than {crop_label}.",
+                    "Confirm you've selected the correct crop in the dropdown.",
+                ],
+                "treatment": [
+                    "Switch the crop selector to match the actual leaf photographed.",
+                    "Or recapture a clearer leaf image of the intended crop.",
+                ],
+                "preventive": [
+                    "Always frame a single representative leaf per scan.",
+                ],
+            }],
+            "scoutingPlan": [
+                f"Re-confirm crop selection vs. photographed leaf.",
+            ],
+            "modelConfidence": round(other_crop_total, 3),
+            "topPredictions": [
+                {
+                    "label": _humanize(_CEREAL_ID2LABEL[i])[1] + f" ({_CEREAL_ID2LABEL[i].split('___')[0]})",
+                    "probability": round(float(full_probs[i]), 3),
+                }
+                for i in np.argsort(full_probs)[-3:][::-1]
+            ],
+            "source": "Cereal ViT (rice/wheat specialist) - crop mismatch",
+            "generatedAt": int(time.time() * 1000),
+        }
+
+    if not crop_indices:
+        return {"error": f"No {crop_label} classes registered in cereal model."}
+
+    crop_probs = full_probs[crop_indices]
+    crop_probs = crop_probs / crop_probs.sum() if crop_probs.sum() > 0 else crop_probs
+    sorted_local = np.argsort(crop_probs)[::-1]
+    top_k = [
+        (_CEREAL_ID2LABEL[crop_indices[int(i)]], float(crop_probs[int(i)]))
+        for i in sorted_local[:3]
+    ]
+    top_label, top_conf = top_k[0]
+    second_conf = float(top_k[1][1]) if len(top_k) > 1 else 0.0
+    margin = top_conf - second_conf
+
+    if top_conf < 0.50 or margin < 0.10:
+        labels_pretty = ", ".join(
+            f"{_humanize(name)[1]} ({int(prob * 100)}%)" for name, prob in top_k
+        )
+        return {
+            "crop": crop_label,
+            "growthStage": stage_hint or "Observed via image scan",
+            "healthScore": 65,
+            "overallSeverity": "watch",
+            "issues": [{
+                "name": "Uncertain diagnosis",
+                "kind": "disease",
+                "severity": "watch",
+                "probability": top_conf,
+                "symptoms": [
+                    "Model confidence is low for a single class.",
+                    f"Top candidates: {labels_pretty}",
+                ],
+                "treatment": [
+                    "Re-photograph in good daylight with leaf filling the frame.",
+                    "Capture both upper and lower leaf surfaces.",
+                ],
+                "preventive": [
+                    "Continue scouting every 48 hours.",
+                    "Contact a local plant expert if symptoms spread quickly.",
+                ],
+            }],
+            "scoutingPlan": [
+                f"Recapture clearer images for {crop_label} within 24 hours.",
+            ],
+            "modelConfidence": round(top_conf, 3),
+            "topPredictions": [
+                {"label": _humanize(name)[1], "probability": round(prob, 3)} for name, prob in top_k
+            ],
+            "source": "Cereal ViT (rice/wheat specialist) - low-confidence fallback",
+            "generatedAt": int(time.time() * 1000),
+        }
+
+    _, predicted_disease = _humanize(top_label)
+
+    if "healthy" in top_label.lower():
+        return {
+            "crop": crop_label,
+            "growthStage": stage_hint or "Observed via image scan",
+            "healthScore": 95,
+            "overallSeverity": "healthy",
+            "issues": [{**HEALTHY_RESPONSE, "probability": top_conf}],
+            "scoutingPlan": [
+                f"Continue weekly scouting of {crop_label}.",
+                "Photograph canopy regularly for trend tracking.",
+            ],
+            "modelConfidence": round(top_conf, 3),
+            "topPredictions": [
+                {"label": _humanize(name)[1], "probability": round(prob, 3)} for name, prob in top_k
+            ],
+            "source": "Cereal ViT (rice/wheat specialist)",
+            "generatedAt": int(time.time() * 1000),
+        }
+
+    severity = _severity_from_label(top_label)
+    treatment_info = _treatment_for(top_label)
+    health_score = _severity_to_score(severity)
+    scouting_plan = [
+        f"Isolate spread of {predicted_disease.lower()} in {crop_label} and prune affected tillers/leaves.",
+        "Re-scan every 3 days; track spread across rows.",
+    ]
+    if severity == "severe":
+        scouting_plan.append(
+            "High-severity risk detected: contact a local agronomist or plant pathologist within 24-48 hours."
+        )
+
+    return {
+        "crop": crop_label,
+        "growthStage": stage_hint or "Observed via image scan",
+        "healthScore": health_score,
+        "overallSeverity": severity,
+        "issues": [{
+            "name": predicted_disease.title(),
+            "kind": treatment_info["kind"],
+            "severity": severity,
+            "probability": top_conf,
+            "symptoms": [f"Visual indicators most closely match {predicted_disease.lower()}"],
+            "treatment": treatment_info["treatment"],
+            "preventive": treatment_info["preventive"],
+        }],
+        "scoutingPlan": scouting_plan,
+        "modelConfidence": round(top_conf, 3),
+        "topPredictions": [
+            {"label": _humanize(name)[1], "probability": round(prob, 3)} for name, prob in top_k
+        ],
+        "source": "Cereal ViT (rice/wheat specialist)",
+        "generatedAt": int(time.time() * 1000),
+    }
+
+
+def analyze_plant_image(image_bytes: bytes, crop_hint: Optional[str] = None, stage_hint: Optional[str] = None) -> dict:
+    """Route the image to the right specialist model based on the crop hint."""
+    crop_norm = _normalize_crop(crop_hint)
+    crop_label = (crop_hint or crop_norm or "this crop").strip()
+
+    if crop_norm in CEREAL_VIT_CROPS:
+        return _analyze_with_cereal_vit(image_bytes, crop_label, crop_norm, stage_hint)
+
+    if crop_norm:
+        if crop_norm not in DISEASE_CAPABLE_CROPS:
+            if crop_norm in HEALTH_ONLY_CROPS:
+                reason = (
+                    f"The plant disease model only knows healthy {crop_label} - "
+                    "it cannot reliably detect diseases for this crop yet."
+                )
+            else:
+                reason = (
+                    f"This model was not trained on {crop_label}. "
+                    "Supported crops: Apple, Cherry, Corn, Grape, Orange, Peach, Pepper, Potato, "
+                    "Squash, Strawberry, Tomato (PlantVillage); Rice, Wheat (cereal specialist)."
+                )
+            return _build_unsupported_response(crop_label, stage_hint, reason)
+
+    net = _build_model()
+    if net is None:
+        return {"error": "Plant disease model not loaded on backend."}
+    try:
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        with torch.no_grad():
+            tensor = _TRANSFORM(image).unsqueeze(0)
+            logits = net(tensor)
+            probs = torch.softmax(logits, dim=1)[0].cpu().numpy()
+    except Exception as exc:
+        return {"error": f"Failed to process image: {exc}"}
+
+    top_k_idx = np.argsort(probs)[-3:][::-1]
+    top_k = [(CLASS_NAMES[i], float(probs[i])) for i in top_k_idx]
+    top_label, top_conf = top_k[0]
+    top_label_lower = top_label.lower()
+    second_conf = float(top_k[1][1]) if len(top_k) > 1 else 0.0
+    margin = top_conf - second_conf
+    predicted_crop, predicted_disease = _humanize(top_label)
+
+    if top_conf < 0.55 or margin < 0.10:
+        labels_pretty = ", ".join(
+            f"{_humanize(name)[1]} ({int(prob * 100)}%)" for name, prob in top_k
+        )
+        crop = (crop_hint or predicted_crop).strip() or "Unknown"
+        return {
+            "crop": crop,
+            "growthStage": stage_hint or "Observed via image scan",
+            "healthScore": 65,
+            "overallSeverity": "watch",
+            "issues": [{
+                "name": "Uncertain diagnosis",
+                "kind": "disease",
+                "severity": "watch",
+                "probability": top_conf,
+                "symptoms": [
+                    "Model confidence is low for a single class.",
+                    f"Top candidates: {labels_pretty}",
+                ],
+                "treatment": [
+                    "Re-photograph in good daylight with leaf filling the frame.",
+                    "Capture both upper and lower leaf surfaces.",
+                    "Avoid blanket spraying until diagnosis is confirmed.",
+                ],
+                "preventive": [
+                    "Continue scouting every 48 hours.",
+                    "Contact a local plant expert if symptoms spread quickly.",
+                ],
+            }],
+            "scoutingPlan": [
+                f"Recapture clearer images for {crop} within 24 hours.",
+                "Track whether spots/lesions are spreading.",
+                "Contact a local agronomist if condition worsens before re-scan.",
+            ],
+            "modelConfidence": round(top_conf, 3),
+            "topPredictions": [
+                {"label": _humanize(name)[1], "probability": round(prob, 3)} for name, prob in top_k
+            ],
+            "source": "PyTorch MobileNetV2 (PlantVillage) - low-confidence fallback",
+            "generatedAt": int(time.time() * 1000),
+        }
+
+    crop = predicted_crop
+    if crop_hint and crop_hint.strip():
+        crop = crop_hint.strip()
+
+    if "healthy" in top_label_lower:
+        return {
+            "crop": crop,
+            "growthStage": stage_hint or "Observed via image scan",
+            "healthScore": 95,
+            "overallSeverity": "healthy",
+            "issues": [{**HEALTHY_RESPONSE, "probability": top_conf}],
+            "scoutingPlan": [
+                f"Continue weekly visual scouting of {crop}.",
+                "Photograph canopy regularly for trend tracking.",
+            ],
+            "modelConfidence": round(top_conf, 3),
+            "topPredictions": [
+                {"label": _humanize(name)[1], "probability": round(prob, 3)} for name, prob in top_k
+            ],
+            "source": "PyTorch MobileNetV2 (PlantVillage)",
+            "generatedAt": int(time.time() * 1000),
+        }
+
+    severity = _severity_from_label(top_label)
+    treatment_info = _treatment_for(top_label)
+
+    response_issue = {
+        "name": predicted_disease.title(),
+        "kind": treatment_info["kind"],
+        "severity": severity,
+        "probability": top_conf,
+        "symptoms": [f"Visual indicators most closely match {predicted_disease.lower()}"],
+        "treatment": treatment_info["treatment"],
+        "preventive": treatment_info["preventive"],
+    }
+
+    health_score = _severity_to_score(severity)
+
+    scouting_plan = [
+        f"Isolate spread of {predicted_disease.lower()} and prune affected leaves.",
+        "Re-scan leaves every 3 days; track spread across rows.",
+    ]
+    if severity == "severe":
+        scouting_plan.append(
+            "High-severity risk detected: contact a local agronomist or plant pathologist within 24-48 hours."
+        )
+
+    return {
+        "crop": crop,
+        "growthStage": stage_hint or "Observed via image scan",
+        "healthScore": health_score,
+        "overallSeverity": severity,
+        "issues": [response_issue],
+        "scoutingPlan": scouting_plan,
+        "modelConfidence": round(top_conf, 3),
+        "topPredictions": [
+            {"label": _humanize(name)[1], "probability": round(prob, 3)} for name, prob in top_k
+        ],
+        "source": "PyTorch MobileNetV2 (PlantVillage)",
+        "generatedAt": int(time.time() * 1000),
+    }
+
+
 def generate_health_report(crop: str, growth_stage: str, symptoms_note: str) -> dict:
-    """Text-based diagnosis logic (fallback if no image uploaded)."""
+    """Text-based diagnosis (used when no image uploaded)."""
     note = symptoms_note.strip()
     matched = []
     seen_names = set()
@@ -221,17 +726,21 @@ def generate_health_report(crop: str, growth_stage: str, symptoms_note: str) -> 
         if any(i["severity"] == s for i in final_issues):
             overall = s
             break
-            
+
     health_score = _severity_to_score(overall)
     if len(matched) > 1:
         health_score = max(30, health_score - (len(matched) - 1) * 8)
 
     scouting_plan = [
         f"Walk {crop} rows every 3 days; photograph both leaf surfaces.",
-        "Focus on border rows and humid spots."
+        "Focus on border rows and humid spots.",
     ]
     if growth_stage in ("flowering", "fruiting", "grain fill"):
-        scouting_plan.append("Peak-risk stage — increase scouting to every 2 days.")
+        scouting_plan.append("Peak-risk stage - increase scouting to every 2 days.")
+    if overall == "severe":
+        scouting_plan.append(
+            "High-severity risk detected: contact a local agronomist or plant pathologist immediately."
+        )
 
     return {
         "crop": crop,
@@ -240,6 +749,6 @@ def generate_health_report(crop: str, growth_stage: str, symptoms_note: str) -> 
         "overallSeverity": overall,
         "issues": final_issues,
         "scoutingPlan": scouting_plan,
-        "source": "Rule-based expert system (Text fall-back)",
+        "source": "Rule-based expert system (text fallback)",
         "generatedAt": int(time.time() * 1000),
     }

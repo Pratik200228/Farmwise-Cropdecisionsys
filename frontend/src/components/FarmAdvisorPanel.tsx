@@ -5,10 +5,14 @@ import { FarmContextForm } from "./FarmContextForm";
 import { RichText } from "./RichText";
 
 const SUGGESTIONS = [
-  "What should I grow this season given my soil and goals?",
-  "How do I time selling maize with market trends?",
-  "My tomato leaves have yellow spots — what should I check first?",
-  "How should I interpret soil moisture for irrigation this week?",
+  "What should I grow this season?",
+  "Best time to sow wheat?",
+  "How often should I water my crop?",
+  "My tomato leaves have yellow spots — what to check?",
+  "When should I sell my wheat?",
+  "Tell me about PM-KISAN and KCC",
+  "Best fertilizer for maize?",
+  "How do I store wheat after harvest?",
 ];
 
 export function FarmAdvisorPanel() {
@@ -22,6 +26,7 @@ export function FarmAdvisorPanel() {
     clearThread,
   } = useFarmAdvisor(defaultFarmContext());
   const [draft, setDraft] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -29,6 +34,7 @@ export function FarmAdvisorPanel() {
   }, [messages, pending]);
 
   const commitSend = () => {
+    if (pending || !draft.trim()) return;
     void send(draft);
     setDraft("");
   };
@@ -88,18 +94,52 @@ export function FarmAdvisorPanel() {
           </p>
         ) : null}
 
-        <div className="suggestions" aria-label="Suggested questions">
-          {SUGGESTIONS.map((s) => (
-            <button
-              key={s}
-              type="button"
-              className="suggestion-chip"
-              disabled={pending}
-              onClick={() => void send(s)}
+        <div className="card" style={{ marginBottom: "0.75rem", padding: "0.75rem" }}>
+          <strong style={{ display: "block", marginBottom: "0.35rem" }}>Current context</strong>
+          <p style={{ margin: 0, color: "var(--muted)" }}>
+            {context.region || "Region not set"} · {context.season || "Season not set"} ·{" "}
+            {context.soilType || "Soil not set"} · {context.farmSizeAcres} acres · goal:{" "}
+            {context.primaryGoal}
+          </p>
+        </div>
+
+        <div className="suggestions-wrap">
+          <button
+            type="button"
+            className="suggestions-toggle"
+            aria-expanded={showSuggestions}
+            aria-controls="suggestions-list"
+            onClick={() => setShowSuggestions((s) => !s)}
+          >
+            <span className="suggestions-toggle__caret" aria-hidden="true">
+              {showSuggestions ? "▾" : "▸"}
+            </span>
+            <span>
+              {showSuggestions ? "Hide suggestions" : "Show suggestions"}
+            </span>
+            <span className="suggestions-toggle__count" aria-hidden="true">
+              {SUGGESTIONS.length}
+            </span>
+          </button>
+          {showSuggestions ? (
+            <div
+              id="suggestions-list"
+              className="suggestions"
+              aria-label="Suggested questions"
             >
-              {s}
-            </button>
-          ))}
+              {SUGGESTIONS.map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="suggestion-chip"
+                  disabled={pending}
+                  onClick={() => setDraft(s)}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+          ) : null}
         </div>
 
         <form className="composer" onSubmit={onSubmit}>
@@ -125,6 +165,7 @@ export function FarmAdvisorPanel() {
             type="submit"
             className="btn btn--primary"
             disabled={pending || !draft.trim()}
+            title={pending ? "Waiting for advisor response" : "Send message"}
           >
             Send
           </button>

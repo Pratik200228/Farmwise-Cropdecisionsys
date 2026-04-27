@@ -308,11 +308,50 @@ body {
   color: var(--danger);
 }
 
+.suggestions-wrap {
+  margin-bottom: 0.75rem;
+}
+
+.suggestions-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font: inherit;
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  padding: 0.25rem 0.1rem;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: color 0.15s;
+}
+
+.suggestions-toggle:hover {
+  color: var(--text);
+}
+
+.suggestions-toggle__caret {
+  font-size: 0.7rem;
+  width: 0.9rem;
+  text-align: center;
+  display: inline-block;
+}
+
+.suggestions-toggle__count {
+  font-size: 0.7rem;
+  background: var(--surface-2);
+  border: 1px solid var(--stroke);
+  border-radius: 999px;
+  padding: 0.05rem 0.45rem;
+  margin-left: 0.15rem;
+}
+
 .suggestions {
   display: flex;
   flex-wrap: wrap;
   gap: 0.45rem;
-  margin-bottom: 0.75rem;
+  margin-top: 0.5rem;
 }
 
 .suggestion-chip {

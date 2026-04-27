@@ -18,7 +18,6 @@ except Exception:
 
 CROP_MARKET_CONFIG = {
     "Corn":    {"baseline": 4.50, "unit": "USD/bu", "harvest_month": 10, "currency": "USD"},
-    "Maize":   {"baseline": 4.50, "unit": "USD/bu", "harvest_month": 10, "currency": "USD"},
     "Rice":    {"baseline": 14.0, "unit": "USD/cwt", "harvest_month": 9, "currency": "USD"},
     "Wheat":   {"baseline": 5.80, "unit": "USD/bu", "harvest_month": 7, "currency": "USD"},
     "Soybean": {"baseline": 13.5, "unit": "USD/bu", "harvest_month": 10, "currency": "USD"},
@@ -39,11 +38,18 @@ def _predict_week_price_corn(year: int, month: int) -> float:
     pred = _CORN_MODEL.predict([[year, month]])[0]
     return round(float(pred), 2)
 
+def _normalize_crop_name(crop: str) -> str:
+    # Keep backward compatibility for older clients that still send "Maize".
+    if crop == "Maize":
+        return "Corn"
+    return crop
+
 def _build_trend(crop: str, current_year: int, current_month: int) -> list:
+    crop = _normalize_crop_name(crop)
     config = CROP_MARKET_CONFIG.get(crop, CROP_MARKET_CONFIG["Corn"])
     baseline = config["baseline"]
     harvest_month = config["harvest_month"]
-    use_model = crop in ("Corn", "Maize") and _CORN_MODEL is not None
+    use_model = crop == "Corn" and _CORN_MODEL is not None
     trend = []
     for offset in range(-3, 5):
         week_month = ((current_month - 1 + (offset // 4)) % 12) + 1
@@ -92,6 +98,7 @@ def _best_selling_window(trend: list, config: dict) -> list:
 
 def generate_market_forecast(crop: str) -> dict:
     import datetime
+    crop = _normalize_crop_name(crop)
     now = datetime.datetime.now()
     config = CROP_MARKET_CONFIG.get(crop, CROP_MARKET_CONFIG["Corn"])
     trend = _build_trend(crop, now.year, now.month)
@@ -100,7 +107,7 @@ def generate_market_forecast(crop: str) -> dict:
     windows = _best_selling_window(trend, config)
     source = (
         "RandomForest ML model trained on USDA NASS corn price data (prabin-branch)"
-        if crop in ("Corn", "Maize") and _CORN_MODEL is not None
+        if crop == "Corn" and _CORN_MODEL is not None
         else "Seasonal heuristic model based on historical harvest cycles"
     )
 

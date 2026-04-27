@@ -4,14 +4,34 @@ __pycache__/
 *.egg-info/
 dist/
 venv/
+.venv/
 .env
+*.env.local
 
 # Node
 node_modules/
 build/
 .env.local
+.vite/
 
 # IDE
 .vscode/
 .idea/
 *.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# ML model weights (downloaded locally, not committed)
+# Re-download via the scripts in backend/scripts/ or instructions in README
+backend/app/models/*.pth
+backend/app/models/*.h5
+backend/app/models/*.safetensors
+backend/app/models/crop_leaf_vit/
+
+# Local logs / temp
+*.log
+*.tmp
+*.bak
