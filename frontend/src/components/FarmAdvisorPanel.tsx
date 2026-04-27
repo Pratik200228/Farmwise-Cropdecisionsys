@@ -180,16 +180,16 @@ export function FarmAdvisorPanel() {
           <h3 className="dev-hint__title">Wire-up</h3>
           <ul className="dev-hint__list">
             <li>
-              Backend: implement <code>POST /api/v1/farm-advisor/chat</code>{" "}
-              accepting <code>messages</code> + <code>context</code>.
+              Backend endpoint: <code>POST /api/v1/farm-advisor/chat</code>{" "}
+              (uses Groq/OpenAI/Anthropic if keys exist, otherwise rule-based fallback).
             </li>
             <li>
               Dev proxy: Vite forwards <code>/api</code> to{" "}
               <code>localhost:8000</code>.
             </li>
             <li>
-              Demo: set <code>VITE_USE_MOCK_AI=true</code> in{" "}
-              <code>.env.local</code>.
+              To use Groq free-tier: set <code>LLM_PROVIDER=groq</code> and{" "}
+              <code>GROQ_API_KEY</code> in <code>backend/.env</code> (or server env vars).
             </li>
           </ul>
         </div>

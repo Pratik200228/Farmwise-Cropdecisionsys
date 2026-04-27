@@ -43,7 +43,7 @@ export function useFarmAdvisor(initialContext: FarmContext) {
       setMessages(threadForApi);
 
       try {
-        const reply = await sendFarmAdvisorMessage(threadForApi, context);
+        const reply = await sendFarmAdvisorMessage(threadForApi, context, "gemini");
         setMessages((prev) => [
           ...prev,
           {

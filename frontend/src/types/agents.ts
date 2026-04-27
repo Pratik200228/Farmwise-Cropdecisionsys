@@ -1,7 +1,7 @@
 import type { FarmContext } from "./farm";
 
 /** Three agent families required for multi-agent season planning */
-export type AgentKind = "suitability" | "market" | "health";
+export type AgentKind = "suitability" | "market" | "health" | "planner";
 
 export type SuitabilityRankedCrop = {
   name: string;

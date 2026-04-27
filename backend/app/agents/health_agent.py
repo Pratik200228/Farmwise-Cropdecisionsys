@@ -35,6 +35,9 @@ TORCH_MODEL_PATH = os.path.join(MODEL_DIR, "mobilenetv2_plant.pth")
 CLASSES_PATH = os.path.join(MODEL_DIR, "disease_class_names.pkl")
 CEREAL_VIT_DIR = os.path.join(MODEL_DIR, "crop_leaf_vit")
 
+HF_PLANT_REPO = os.getenv("HF_PLANT_REPO", "Daksh159/plant-disease-mobilenetv2").strip()
+HF_PLANT_FILENAME = os.getenv("HF_PLANT_FILENAME", "mobilenetv2_plant.pth").strip()
+
 
 def _load_class_names() -> List[str]:
     try:
@@ -150,6 +153,48 @@ _CEREAL_MODEL = None
 _CEREAL_PROCESSOR = None
 _CEREAL_ID2LABEL: dict = {}
 
+_MODEL_DOWNLOAD_ATTEMPTED = False
+
+
+def _ensure_plant_weights_present() -> bool:
+    """Ensure MobileNetV2 weights exist locally; download if missing."""
+    global _MODEL_DOWNLOAD_ATTEMPTED
+    if os.path.exists(TORCH_MODEL_PATH):
+        return True
+    if _MODEL_DOWNLOAD_ATTEMPTED:
+        return False
+    _MODEL_DOWNLOAD_ATTEMPTED = True
+
+    try:
+        os.makedirs(MODEL_DIR, exist_ok=True)
+        from huggingface_hub import hf_hub_download
+
+        logger.info(
+            "Plant weights missing; downloading from Hugging Face repo=%s file=%s",
+            HF_PLANT_REPO,
+            HF_PLANT_FILENAME,
+        )
+        downloaded = hf_hub_download(
+            repo_id=HF_PLANT_REPO,
+            filename=HF_PLANT_FILENAME,
+            local_dir=MODEL_DIR,
+            local_dir_use_symlinks=False,
+        )
+
+        # Ensure the expected filename exists for torch.load
+        if os.path.abspath(downloaded) != os.path.abspath(TORCH_MODEL_PATH):
+            try:
+                if os.path.exists(TORCH_MODEL_PATH):
+                    os.remove(TORCH_MODEL_PATH)
+                os.replace(downloaded, TORCH_MODEL_PATH)
+            except Exception:
+                pass
+
+        return os.path.exists(TORCH_MODEL_PATH)
+    except Exception as exc:
+        logger.exception("Failed downloading plant model weights: %s", exc)
+        return False
+
 
 def _build_cereal_model():
     """Lazy-load the rice/wheat ViT (Layer 2 specialist)."""
@@ -184,8 +229,13 @@ def _build_model():
         return None
     if _MODEL is not None:
         return _MODEL
-    if not os.path.exists(TORCH_MODEL_PATH):
-        logger.warning("MobileNetV2 plant model not found at %s", TORCH_MODEL_PATH)
+    if not _ensure_plant_weights_present():
+        logger.warning(
+            "MobileNetV2 plant model not available at %s (HF_PLANT_REPO=%s HF_PLANT_FILENAME=%s)",
+            TORCH_MODEL_PATH,
+            HF_PLANT_REPO,
+            HF_PLANT_FILENAME,
+        )
         return None
     try:
         net = models.mobilenet_v2(weights=None)

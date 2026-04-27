@@ -508,9 +508,63 @@ def _groq_reply(api_key: str, system_prompt: str, messages: List[Dict[str, str]]
         model=os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile"),
     )
 
+def _gemini_reply(api_key: str, system_prompt: str, messages: List[Dict[str, str]]) -> str:
+    """Google Gemini via Generative Language API (generateContent).
+
+    Uses a simple text-only payload. If the API changes, adjust URL/payload here.
+    """
+    model = os.getenv("GEMINI_MODEL", "gemini-1.5-flash").strip() or "gemini-1.5-flash"
+    base_url = os.getenv(
+        "GEMINI_BASE_URL",
+        "https://generativelanguage.googleapis.com/v1beta",
+    ).strip()
+    url = f"{base_url.rstrip('/')}/models/{model}:generateContent"
+
+    # Gemini expects "contents" with parts. We'll map chat messages into a single-turn style
+    # while preserving a small amount of history.
+    contents = []
+    for m in messages:
+        role = (m.get("role") or "").strip().lower()
+        text = (m.get("content") or "").strip()
+        if not text:
+            continue
+        # Gemini roles are typically "user" / "model". Map assistant/system to "model".
+        gem_role = "user" if role == "user" else "model"
+        contents.append({"role": gem_role, "parts": [{"text": text}]})
+
+    if not contents:
+        return ""
+
+    payload = {
+        "systemInstruction": {"parts": [{"text": system_prompt}]},
+        "contents": contents[-12:],  # keep small for latency/cost
+        "generationConfig": {
+            "temperature": 0.35,
+            "maxOutputTokens": int(os.getenv("GEMINI_MAX_TOKENS", "700")),
+        },
+    }
+
+    headers = {
+        "Content-Type": "application/json",
+        # Support both header-based auth and querystring key.
+        "x-goog-api-key": api_key,
+    }
+    res = requests.post(url, json=payload, headers=headers, timeout=30)
+    res.raise_for_status()
+    data = res.json() or {}
+
+    # Expected shape: candidates[0].content.parts[].text
+    candidates = data.get("candidates") or []
+    if not candidates:
+        return ""
+    content = (candidates[0].get("content") or {})
+    parts = content.get("parts") or []
+    texts = [p.get("text", "") for p in parts if isinstance(p, dict)]
+    return "\n".join([t for t in texts if t]).strip()
+
 
 def _llm_reply(body: AdvisorRequest) -> str:
-    provider = os.getenv("LLM_PROVIDER", "anthropic").strip().lower()
+    provider = (body.provider or os.getenv("LLM_PROVIDER", "anthropic")).strip().lower()
     system_prompt = _build_system_prompt(body)
     messages = _to_llm_messages(body)
 
@@ -522,6 +576,12 @@ def _llm_reply(body: AdvisorRequest) -> str:
         if not api_key:
             return ""
         return _groq_reply(api_key, system_prompt, messages)
+
+    if provider == "gemini":
+        api_key = os.getenv("GEMINI_API_KEY", "").strip()
+        if not api_key:
+            return ""
+        return _gemini_reply(api_key, system_prompt, messages)
 
     if provider == "openai":
         api_key = os.getenv("OPENAI_API_KEY", "").strip()
