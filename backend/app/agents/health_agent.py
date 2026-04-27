@@ -22,11 +22,13 @@ logger = logging.getLogger(__name__)
 
 
 _ONNX_OK = True
+_ONNX_EXC = None
 try:
     import onnxruntime as ort
 except Exception as exc:
     logger.warning("onnxruntime unavailable, image scan disabled: %s", exc)
     _ONNX_OK = False
+    _ONNX_EXC = str(exc)
 
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
@@ -161,7 +163,7 @@ def _build_model():
     """Lazy-load the ONNX Runtime inference session."""
     global _ONNX_SESSION
     if not _ONNX_OK:
-        return None
+        raise RuntimeError(f"onnxruntime import failed: {_ONNX_EXC}")
     if _ONNX_SESSION is not None:
         return _ONNX_SESSION
     if not _ensure_plant_weights_present():
@@ -558,9 +560,12 @@ def analyze_plant_image(image_bytes: bytes, crop_hint: Optional[str] = None, sta
                 )
             return _build_unsupported_response(crop_label, stage_hint, reason)
 
-    session = _build_model()
-    if session is None:
-        return {"error": "Plant disease model not loaded on backend."}
+    try:
+        session = _build_model()
+        if session is None:
+            return {"error": "Plant disease model not loaded on backend (unknown error)."}
+    except Exception as e:
+        return {"error": str(e)}
     try:
         arr = _preprocess(image_bytes)
         input_name = session.get_inputs()[0].name
