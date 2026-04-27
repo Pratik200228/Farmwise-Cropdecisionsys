@@ -35,37 +35,6 @@ def _log_env_status() -> None:
         )
 
 
-@app.on_event("startup")
-def _ensure_plant_model() -> None:
-    """Auto-download the MobileNetV2 plant disease model from HuggingFace
-    if it is not already present on disk. This allows Render (and any other
-    host) to fetch the weights on first boot without manual file uploads.
-    The weights are ~9 MB and are downloaded once; subsequent restarts skip.
-    """
-    model_dir = Path(__file__).resolve().parent / "models"
-    model_path = model_dir / "mobilenetv2_plant.pth"
-    if model_path.exists():
-        print(f"[model] Plant disease model already present at {model_path}")
-        return
-    try:
-        print("[model] Plant disease model not found — downloading from HuggingFace...")
-        from huggingface_hub import hf_hub_download
-        model_dir.mkdir(parents=True, exist_ok=True)
-        downloaded = hf_hub_download(
-            repo_id="Daksh159/plant-disease-mobilenetv2",
-            filename="mobilenetv2_plant.pth",
-            local_dir=str(model_dir),
-        )
-        # hf_hub_download may nest in a subfolder — move to expected path
-        downloaded_path = Path(downloaded)
-        if downloaded_path.resolve() != model_path.resolve():
-            downloaded_path.rename(model_path)
-        print(f"[model] Downloaded successfully -> {model_path}")
-    except Exception as exc:
-        print(f"[model] WARNING: Could not download plant disease model: {exc}")
-        print("[model] Image-based disease scan will be unavailable until the model is present.")
-
-
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],

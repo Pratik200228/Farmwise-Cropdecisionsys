@@ -9,11 +9,7 @@ numpy
 scikit-learn>=1.6.1,<1.7.0
 joblib
 pillow
-# Plant disease classifier uses public PlantVillage MobileNetV2 (PyTorch) checkpoint.
-# Install CPU wheels via: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
-torch>=2.1
-torchvision>=0.16
-# huggingface_hub is used only for auto-downloading model weights on first boot.
-# transformers / safetensors are NOT installed (cereal ViT not deployed on free tier).
-huggingface_hub>=0.23
+# Plant disease image classifier — ONNX Runtime (CPU) is used instead of PyTorch.
+# onnxruntime uses ~80MB RAM vs PyTorch's ~350MB, keeping us inside Render's 512MB free limit.
+onnxruntime
 requests

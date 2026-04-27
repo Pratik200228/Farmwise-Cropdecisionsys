@@ -1,9 +1,10 @@
 """
 Crop Health Monitoring Agent.
 
-Image classification uses a known-good public PlantVillage MobileNetV2
-checkpoint (Daksh159/plant-disease-mobilenetv2 on Hugging Face), trained
-on the New Plant Diseases Dataset (Augmented) - 38 classes, 95% val acc.
+Image classification uses ONNX Runtime (CPU) with the PlantVillage
+MobileNetV2 checkpoint — 38 classes, ~95% val accuracy.
+Using ONNX Runtime instead of PyTorch keeps RAM usage ~80MB vs ~350MB,
+fitting comfortably inside Render's free 512MB limit.
 Text-symptom diagnosis uses a curated rule-based expert system.
 """
 
@@ -20,23 +21,17 @@ from PIL import Image
 logger = logging.getLogger(__name__)
 
 
-_TORCH_OK = True
+_ONNX_OK = True
 try:
-    import torch
-    import torch.nn as nn
-    from torchvision import models, transforms
-    # Limit to 1 CPU thread — reduces per-thread memory buffers significantly.
-    # On Render free tier (512MB RAM) multi-threading causes OOM crashes.
-    torch.set_num_threads(1)
+    import onnxruntime as ort
 except Exception as exc:
-    logger.warning("PyTorch unavailable, image scan disabled: %s", exc)
-    _TORCH_OK = False
+    logger.warning("onnxruntime unavailable, image scan disabled: %s", exc)
+    _ONNX_OK = False
 
 
 MODEL_DIR = os.path.join(os.path.dirname(__file__), "..", "models")
-TORCH_MODEL_PATH = os.path.join(MODEL_DIR, "mobilenetv2_plant.pth")
+ONNX_MODEL_PATH = os.path.join(MODEL_DIR, "mobilenetv2_plant.onnx")
 CLASSES_PATH = os.path.join(MODEL_DIR, "disease_class_names.pkl")
-CEREAL_VIT_DIR = os.path.join(MODEL_DIR, "crop_leaf_vit")
 
 HF_PLANT_REPO = os.getenv("HF_PLANT_REPO", "Daksh159/plant-disease-mobilenetv2").strip()
 HF_PLANT_FILENAME = os.getenv("HF_PLANT_FILENAME", "mobilenetv2_plant.pth").strip()
@@ -150,117 +145,56 @@ def _build_unsupported_response(crop_label: str, stage_hint: Optional[str], reas
     }
 
 
-_MODEL = None
-_TRANSFORM = None
-_CEREAL_MODEL = None
-_CEREAL_PROCESSOR = None
-_CEREAL_ID2LABEL: dict = {}
+_ONNX_SESSION = None
+_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32).reshape(1, 3, 1, 1)
+_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32).reshape(1, 3, 1, 1)
 
 _MODEL_DOWNLOAD_ATTEMPTED = False
 
 
 def _ensure_plant_weights_present() -> bool:
-    """Ensure MobileNetV2 weights exist locally; download if missing."""
-    global _MODEL_DOWNLOAD_ATTEMPTED
-    if os.path.exists(TORCH_MODEL_PATH):
-        return True
-    if _MODEL_DOWNLOAD_ATTEMPTED:
-        return False
-    _MODEL_DOWNLOAD_ATTEMPTED = True
-
-    try:
-        os.makedirs(MODEL_DIR, exist_ok=True)
-        from huggingface_hub import hf_hub_download
-
-        logger.info(
-            "Plant weights missing; downloading from Hugging Face repo=%s file=%s",
-            HF_PLANT_REPO,
-            HF_PLANT_FILENAME,
-        )
-        downloaded = hf_hub_download(
-            repo_id=HF_PLANT_REPO,
-            filename=HF_PLANT_FILENAME,
-            local_dir=MODEL_DIR,
-            local_dir_use_symlinks=False,
-        )
-
-        # Ensure the expected filename exists for torch.load
-        if os.path.abspath(downloaded) != os.path.abspath(TORCH_MODEL_PATH):
-            try:
-                if os.path.exists(TORCH_MODEL_PATH):
-                    os.remove(TORCH_MODEL_PATH)
-                os.replace(downloaded, TORCH_MODEL_PATH)
-            except Exception:
-                pass
-
-        return os.path.exists(TORCH_MODEL_PATH)
-    except Exception as exc:
-        logger.exception("Failed downloading plant model weights: %s", exc)
-        return False
-
-
-def _build_cereal_model():
-    """Lazy-load the rice/wheat ViT (Layer 2 specialist)."""
-    global _CEREAL_MODEL, _CEREAL_PROCESSOR, _CEREAL_ID2LABEL
-    if _CEREAL_MODEL is not None:
-        return _CEREAL_MODEL
-    if not _TORCH_OK:
-        return None
-    if not os.path.isdir(CEREAL_VIT_DIR):
-        logger.warning("Cereal ViT directory not found at %s", CEREAL_VIT_DIR)
-        return None
-    try:
-        from transformers import AutoImageProcessor, AutoModelForImageClassification
-        proc = AutoImageProcessor.from_pretrained(CEREAL_VIT_DIR)
-        net = AutoModelForImageClassification.from_pretrained(CEREAL_VIT_DIR)
-        net.eval()
-        _CEREAL_MODEL = net
-        _CEREAL_PROCESSOR = proc
-        _CEREAL_ID2LABEL = {int(k): v for k, v in net.config.id2label.items()}
-        logger.info(
-            "Loaded cereal ViT (rice/wheat specialist) - %d classes", len(_CEREAL_ID2LABEL)
-        )
-        return _CEREAL_MODEL
-    except Exception as exc:
-        logger.exception("Failed to load cereal ViT: %s", exc)
-        return None
+    """Return True if the ONNX model file exists on disk."""
+    return os.path.exists(ONNX_MODEL_PATH)
 
 
 def _build_model():
-    global _MODEL, _TRANSFORM
-    if not _TORCH_OK:
+    """Lazy-load the ONNX Runtime inference session."""
+    global _ONNX_SESSION
+    if not _ONNX_OK:
         return None
-    if _MODEL is not None:
-        return _MODEL
+    if _ONNX_SESSION is not None:
+        return _ONNX_SESSION
     if not _ensure_plant_weights_present():
         logger.warning(
             "MobileNetV2 plant model not available at %s (HF_PLANT_REPO=%s HF_PLANT_FILENAME=%s)",
-            TORCH_MODEL_PATH,
+            ONNX_MODEL_PATH,
             HF_PLANT_REPO,
             HF_PLANT_FILENAME,
         )
         return None
     try:
-        net = models.mobilenet_v2(weights=None)
-        in_features = net.classifier[1].in_features
-        net.classifier[1] = nn.Sequential(
-            nn.Dropout(0.2),
-            nn.Linear(in_features, len(CLASS_NAMES)),
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = 1   # keep RAM low on free tier
+        opts.inter_op_num_threads = 1
+        _ONNX_SESSION = ort.InferenceSession(
+            ONNX_MODEL_PATH,
+            sess_options=opts,
+            providers=["CPUExecutionProvider"],
         )
-        state = torch.load(TORCH_MODEL_PATH, map_location="cpu")
-        net.load_state_dict(state)
-        net.eval()
-        _MODEL = net
-        _TRANSFORM = transforms.Compose([
-            transforms.Resize((224, 224)),
-            transforms.ToTensor(),
-            transforms.Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225]),
-        ])
-        logger.info("Loaded plant disease MobileNetV2 (%d classes)", len(CLASS_NAMES))
-        return _MODEL
+        logger.info("Loaded ONNX plant disease model (%d classes)", len(CLASS_NAMES))
+        return _ONNX_SESSION
     except Exception as exc:
-        logger.exception("Failed to load MobileNetV2 plant model: %s", exc)
+        logger.exception("Failed to load ONNX plant model: %s", exc)
         return None
+
+
+def _preprocess(image_bytes: bytes) -> np.ndarray:
+    """Decode image bytes → normalised float32 NCHW array for ONNX Runtime."""
+    img = Image.open(io.BytesIO(image_bytes)).convert("RGB").resize((224, 224))
+    arr = np.array(img, dtype=np.float32) / 255.0          # HWC [0,1]
+    arr = arr.transpose(2, 0, 1)[np.newaxis, ...]           # NCHW
+    arr = (arr - _MEAN) / _STD
+    return arr
 
 
 HEALTH_RULES = [
@@ -605,12 +539,9 @@ def _analyze_with_cereal_vit(
 
 
 def analyze_plant_image(image_bytes: bytes, crop_hint: Optional[str] = None, stage_hint: Optional[str] = None) -> dict:
-    """Route the image to the right specialist model based on the crop hint."""
+    """Classify the uploaded leaf image using the ONNX Runtime MobileNetV2 session."""
     crop_norm = _normalize_crop(crop_hint)
     crop_label = (crop_hint or crop_norm or "this crop").strip()
-
-    if crop_norm in CEREAL_VIT_CROPS:
-        return _analyze_with_cereal_vit(image_bytes, crop_label, crop_norm, stage_hint)
 
     if crop_norm:
         if crop_norm not in DISEASE_CAPABLE_CROPS:
@@ -622,20 +553,20 @@ def analyze_plant_image(image_bytes: bytes, crop_hint: Optional[str] = None, sta
             else:
                 reason = (
                     f"This model was not trained on {crop_label}. "
-                    "Supported crops: Apple, Cherry, Corn, Grape, Orange, Peach, Pepper, Potato, "
-                    "Squash, Strawberry, Tomato (PlantVillage); Rice, Wheat (cereal specialist)."
+                    "Supported crops: Apple, Cherry, Corn, Grape, Orange, Peach, Pepper, "
+                    "Potato, Squash, Strawberry, Tomato."
                 )
             return _build_unsupported_response(crop_label, stage_hint, reason)
 
-    net = _build_model()
-    if net is None:
+    session = _build_model()
+    if session is None:
         return {"error": "Plant disease model not loaded on backend."}
     try:
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        with torch.no_grad():
-            tensor = _TRANSFORM(image).unsqueeze(0)
-            logits = net(tensor)
-            probs = torch.softmax(logits, dim=1)[0].cpu().numpy()
+        arr = _preprocess(image_bytes)
+        input_name = session.get_inputs()[0].name
+        logits = session.run(None, {input_name: arr})[0][0]   # shape (38,)
+        probs = np.exp(logits - logits.max())
+        probs /= probs.sum()                                   # softmax
     except Exception as exc:
         return {"error": f"Failed to process image: {exc}"}
 
