@@ -13,8 +13,7 @@ pillow
 # Install CPU wheels via: pip install --index-url https://download.pytorch.org/whl/cpu torch torchvision
 torch>=2.1
 torchvision>=0.16
-# Layer 2 cereal specialist (rice/wheat ViT from HF Hub)
-transformers>=4.41
-safetensors>=0.4
+# huggingface_hub is used only for auto-downloading model weights on first boot.
+# transformers / safetensors are NOT installed (cereal ViT not deployed on free tier).
 huggingface_hub>=0.23
 requests

@@ -25,6 +25,9 @@ try:
     import torch
     import torch.nn as nn
     from torchvision import models, transforms
+    # Limit to 1 CPU thread — reduces per-thread memory buffers significantly.
+    # On Render free tier (512MB RAM) multi-threading causes OOM crashes.
+    torch.set_num_threads(1)
 except Exception as exc:
     logger.warning("PyTorch unavailable, image scan disabled: %s", exc)
     _TORCH_OK = False
