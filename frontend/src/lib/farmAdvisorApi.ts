@@ -6,6 +6,7 @@ const ADVISOR_PATH = "/api/v1/farm-advisor/chat";
 export type AdvisorRequestBody = {
   messages: { role: "user" | "assistant" | "system"; content: string }[];
   context: FarmContext;
+  provider?: "anthropic" | "openai" | "groq" | "gemini";
 };
 
 export type AdvisorResponseBody = {
@@ -215,6 +216,7 @@ export function mockAdvisorReply(messages: ChatMessage[], context: FarmContext):
 export async function sendFarmAdvisorMessage(
   messages: ChatMessage[],
   context: FarmContext,
+  provider?: AdvisorRequestBody["provider"],
 ): Promise<string> {
   if (isMockAiEnabled()) {
     await new Promise((r) => setTimeout(r, 600));
@@ -224,6 +226,7 @@ export async function sendFarmAdvisorMessage(
   const body: AdvisorRequestBody = {
     messages: messages.map((m) => ({ role: m.role, content: m.content })),
     context,
+    provider,
   };
 
   const res = await fetch(buildApiUrl(ADVISOR_PATH), {

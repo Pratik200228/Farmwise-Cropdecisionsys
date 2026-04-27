@@ -9,6 +9,7 @@ import type {
   SuitabilityAgentResult,
   SuitabilityRequestBody,
 } from "../types/agents";
+import { sendFarmAdvisorMessage } from "./farmAdvisorApi";
 import { buildApiUrl, isMockAiEnabled } from "./runtimeConfig";
 
 const PATHS = {
@@ -180,14 +181,50 @@ const STEP_LABELS: Record<string, string> = {
   suitability: "Agent 1 — Crop suitability (environment & soil)",
   market: "Agent 2 — Market intelligence (price & timing)",
   health: "Agent 3 — Crop health (scouting & risk)",
+  planner: "Agent 4 — AI planner (integrated season plan)",
 };
 
 function initSteps(): OrchestrationStep[] {
-  return (["suitability", "market", "health"] as const).map((kind) => ({
+  return (["suitability", "market", "health", "planner"] as const).map((kind) => ({
     kind,
     label: STEP_LABELS[kind],
     status: "idle" as const,
   }));
+}
+
+function buildPlannerPrompt(args: {
+  context: FarmContext;
+  focusCrop: string;
+  suitability: SuitabilityAgentResult;
+  market: MarketAgentResult;
+  health: HealthAgentResult;
+  symptomsNote?: string;
+}): string {
+  const { context, focusCrop, suitability, market, health, symptomsNote } = args;
+  return [
+    "Create an integrated **season plan** for the farmer using the provided agent outputs.",
+    "",
+    "Requirements:",
+    "- Use the farmer's context (region/season/soil/goal) as the anchor.",
+    "- Output must be concise and actionable. Use markdown headings and bullet points.",
+    "- Include: crop recommendation, planting window, irrigation & nutrient priorities, pest/disease scouting, and sell/timing guidance.",
+    "- Call out the top 3 risks + mitigations and 3 immediate next steps (next 7 days).",
+    "- Do NOT claim live weather/market data. Use only what is provided.",
+    "",
+    `Farm context: region=${context.region || "n/a"}, season=${context.season || "n/a"}, soil=${context.soilType || "n/a"}, acres=${context.farmSizeAcres}, goal=${context.primaryGoal}.`,
+    symptomsNote?.trim() ? `Symptoms note: ${symptomsNote.trim()}` : "Symptoms note: (none)",
+    "",
+    `Focus crop: ${focusCrop}`,
+    "",
+    "Agent 1 (Suitability) output:",
+    JSON.stringify(suitability, null, 2),
+    "",
+    "Agent 2 (Market) output:",
+    JSON.stringify(market, null, 2),
+    "",
+    "Agent 3 (Health) output:",
+    JSON.stringify(health, null, 2),
+  ].join("\n");
 }
 
 /**
@@ -201,7 +238,11 @@ export async function runMultiAgentSeasonPlan(
 ): Promise<MultiAgentSeasonPlan> {
   let steps = initSteps();
 
-  const update = (kind: keyof typeof PATHS, status: OrchestrationStep["status"], err?: string) => {
+  const update = (
+    kind: OrchestrationStep["kind"],
+    status: OrchestrationStep["status"],
+    err?: string,
+  ) => {
     steps = steps.map((s) =>
       s.kind === kind ? { ...s, status, error: err } : s,
     );
@@ -270,7 +311,8 @@ export async function runMultiAgentSeasonPlan(
     throw new Error(errs.join(" · ") || "Market or health agent failed");
   }
 
-  const integratedSummary = mergeSummary(
+  update("planner", "running");
+  let integratedSummary = mergeSummary(
     context,
     focusCrop,
     suitability,
@@ -278,6 +320,46 @@ export async function runMultiAgentSeasonPlan(
     health,
     symptomsNote,
   );
+
+  // Upgrade the integrated summary using the backend LLM (Groq free-tier supported).
+  // If the API is unreachable or no keys are configured, the backend will fall back,
+  // and if the request fails we keep the deterministic summary above.
+  if (!useMock()) {
+    try {
+      integratedSummary = await sendFarmAdvisorMessage(
+        [
+          {
+            id: "planner-system",
+            role: "system",
+            content:
+              "You are an agronomy + farm economics planner. Produce a season plan using only provided context and agent outputs.",
+            createdAt: Date.now(),
+          },
+          {
+            id: "planner-user",
+            role: "user",
+            content: buildPlannerPrompt({
+              context,
+              focusCrop,
+              suitability,
+              market,
+              health,
+              symptomsNote,
+            }),
+            createdAt: Date.now(),
+          },
+        ],
+        context,
+        "groq",
+      );
+      update("planner", "done");
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Planner agent failed";
+      update("planner", "error", msg);
+    }
+  } else {
+    update("planner", "done");
+  }
 
   return {
     context,

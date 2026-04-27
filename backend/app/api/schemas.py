@@ -31,6 +31,9 @@ class AdvisorMessage(BaseModel):
 class AdvisorRequest(BaseModel):
     messages: List[AdvisorMessage]
     context: FarmContext
+    # Optional per-request override so different UI features can use different providers.
+    # If omitted, backend uses LLM_PROVIDER.
+    provider: Optional[Literal["anthropic", "openai", "groq", "gemini"]] = None
 
 class AdvisorResponse(BaseModel):
     reply: str

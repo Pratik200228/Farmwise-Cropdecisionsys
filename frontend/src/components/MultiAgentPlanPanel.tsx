@@ -123,6 +123,11 @@ export function MultiAgentPlanPanel() {
                           label: "Monitor crop health risks",
                           status: "idle",
                         },
+                        {
+                          kind: "planner",
+                          label: "Generate integrated season plan (AI planner)",
+                          status: "idle",
+                        },
                       ]
                 }
               />
