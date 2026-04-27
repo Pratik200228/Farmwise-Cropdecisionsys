@@ -594,11 +594,16 @@ def analyze_plant_image(image_bytes: bytes, crop_hint: Optional[str] = None, sta
     margin = top_conf - second_conf
     predicted_crop, predicted_disease = _humanize(top_label)
 
+    # Use the model's predicted crop name — don't override with crop_hint.
+    # crop_hint is used only for routing (cereal ViT vs MobileNetV2),
+    # not for labelling the result. This way the result always reflects
+    # what the model actually saw, regardless of what the UI dropdown says.
+
     if top_conf < 0.55 or margin < 0.10:
         labels_pretty = ", ".join(
             f"{_humanize(name)[1]} ({int(prob * 100)}%)" for name, prob in top_k
         )
-        crop = (crop_hint or predicted_crop).strip() or "Unknown"
+        crop = predicted_crop.strip() or crop_hint or "Unknown"
         return {
             "crop": crop,
             "growthStage": stage_hint or "Observed via image scan",
@@ -636,9 +641,7 @@ def analyze_plant_image(image_bytes: bytes, crop_hint: Optional[str] = None, sta
             "generatedAt": int(time.time() * 1000),
         }
 
-    crop = predicted_crop
-    if crop_hint and crop_hint.strip():
-        crop = crop_hint.strip()
+    crop = predicted_crop.strip() or crop_hint or "Unknown"
 
     if "healthy" in top_label_lower:
         return {

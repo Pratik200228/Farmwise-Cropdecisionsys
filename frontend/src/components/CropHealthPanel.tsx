@@ -1,6 +1,24 @@
 import { useState, type FormEvent, type ChangeEvent } from "react";
-import { runHealthMonitoring, runHealthScan, supportedMarketCrops } from "../lib/insightsApi";
+import { runHealthMonitoring, runHealthScan } from "../lib/insightsApi";
 import type { HealthIssue, HealthReport } from "../types/insights";
+
+// All crops supported by the disease scan models:
+// PlantVillage MobileNetV2 (Layer 1) + Cereal ViT (Layer 2)
+const HEALTH_CROPS = [
+  "Apple",
+  "Cherry",
+  "Corn",
+  "Grape",
+  "Orange",
+  "Peach",
+  "Pepper",
+  "Potato",
+  "Rice",
+  "Squash",
+  "Strawberry",
+  "Tomato",
+  "Wheat",
+];
 
 const GROWTH_STAGES = [
   "seedling",
@@ -72,8 +90,7 @@ function IssueCard({ issue }: { issue: HealthIssue }) {
 }
 
 export function CropHealthPanel() {
-  const crops = supportedMarketCrops();
-  const [crop, setCrop] = useState(crops[0]);
+  const [crop, setCrop] = useState(HEALTH_CROPS[0]);
   const [growthStage, setGrowthStage] = useState("vegetative");
   const [symptoms, setSymptoms] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
@@ -158,7 +175,7 @@ export function CropHealthPanel() {
                 value={crop}
                 onChange={(e) => setCrop(e.target.value)}
               >
-                {crops.map((c) => (
+                {HEALTH_CROPS.map((c) => (
                   <option key={c} value={c}>
                     {c}
                   </option>
