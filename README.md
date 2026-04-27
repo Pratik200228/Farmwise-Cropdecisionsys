@@ -8,7 +8,7 @@ Small and family farmers make high-stakes decisions every day — which crops to
 
 ## 🚀 What It Does
 
-FarmWise AI combines three tightly integrated capabilities into a single visual dashboard:
+FarmWise AI combines four tightly integrated capabilities into a single visual dashboard:
 
 **1. Crop Suitability Analysis**  
 A hybrid AI agent analyzes 8 environmental parameters (N, P, K, Temp, Humidity, pH, Rainfall, Wind) and ranks crops by suitability score. We use a **Random Forest Classifier** blended with **Agronomic Expert Rules** to ensure grounded, realistic recommendations.
@@ -17,17 +17,19 @@ A hybrid AI agent analyzes 8 environmental parameters (N, P, K, Temp, Humidity, 
 A forensic pricing agent that uses a **Random Forest Regressor** (for primary grains) and **Seasonal Heuristic Modeling** (for other crops). It identifies optimal "Peak Selling Windows" to help farmers maximize their profit margins.
 
 **3. Crop Health Monitor**  
-A computer vision engine powered by **MobileNetV2 (CNN)**. Farmers take a photo of a leaf, and the AI identifies the disease and provides an immediate, professional treatment plan.
+A computer vision engine powered by **MobileNetV2 (PyTorch)** trained on the PlantVillage dataset (38 classes, ~95% val accuracy). Farmers take a photo of a leaf and the AI identifies the disease with an immediate treatment plan. Model weights are auto-downloaded from HuggingFace on first boot.
+
+**4. Ask FarmWise (AI Chat)**  
+A conversational advisor powered by **Groq (llama-3.3-70b)** with a 19-intent rule-based fallback. Answers questions about crop rotation, soil health, market timing, government schemes and more.
 
 ---
 
 ## 🏗️ Technical Architecture
 
-We use a **Decoupled SaaS Architecture** to balance performance with AI compute requirements:
-
-- **Frontend**: React + TypeScript (Vite) hosted on **Vercel**.
-- **Backend**: FastAPI (Python) hosted on **Render.com**.
-- **Specialized AI**: Local ML models (Scikit-Learn, TensorFlow/MobileNetV2) run on the backend to avoid the latency and cost of external LLM APIs.
+- **Frontend**: React + TypeScript (Vite) hosted on **Vercel**
+- **Backend**: FastAPI (Python) hosted on **Render.com**
+- **Disease Model**: PyTorch MobileNetV2 — auto-downloaded from HuggingFace Hub on startup
+- **LLM**: Groq API (llama-3.3-70b) with automatic rule-based fallback
 
 ---
 
@@ -35,41 +37,41 @@ We use a **Decoupled SaaS Architecture** to balance performance with AI compute 
 
 | Layer | Technology |
 |---|---|
-| **Frontend** | React, TypeScript, Tailwind CSS, Recharts |
+| **Frontend** | React, TypeScript, Vite, Recharts |
 | **Backend** | Python, FastAPI, Uvicorn |
 | **AI (Suitability)** | Scikit-learn (Random Forest Classifier) |
-| **AI (Health)** | TensorFlow (MobileNetV2 CNN) |
+| **AI (Health)** | PyTorch + MobileNetV2 (PlantVillage, 38 classes) |
 | **AI (Market)** | Scikit-learn (Random Forest Regressor + Seasonal Heuristics) |
+| **AI (Chat)** | Groq API — llama-3.3-70b-versatile |
 | **Deployment** | Vercel (Frontend), Render (Backend) |
 
 ---
 
 ## 🏁 Getting Started
 
-### 1. Backend Setup (AI Brain)
-Ensure you have Python 3.10+ installed.
+### 1. Backend Setup
 ```bash
 cd backend
 python -m venv .venv
-source .env/activate  # Windows: .venv\Scripts\activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
-python -m uvicorn app.main:app --reload
+uvicorn app.main:app --reload
 ```
 
-### 2. Frontend Setup (Dashboard)
-Ensure you have Node.js 18+ installed.
+### 2. Frontend Setup
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-### 3. Environment Configuration
-Create a `.env` in the `frontend/` folder:
+### 3. Environment Variables
+Create `backend/.env`:
 ```env
-VITE_API_BASE_URL=https://your-backend-on-render.com
-VITE_USE_MOCK_AI=false
+LLM_PROVIDER=groq
+GROQ_API_KEY=your_groq_key_here   # free at console.groq.com/keys
 ```
+> The app works without any API keys — it falls back to the built-in rule-based advisor automatically.
 
 ---
 
@@ -79,15 +81,16 @@ VITE_USE_MOCK_AI=false
 farmwise-ai/
 ├── backend/
 │   ├── app/
-│   │   ├── agents/      # The AI logic (Suitability, Market, Health)
-│   │   ├── models/      # Trained .pkl and .h5 files
-│   │   └── api/         # FastAPI Routers
-│   └── main.py          # Entry point
+│   │   ├── agents/      # AI logic (Suitability, Market, Health, Advisor)
+│   │   ├── models/      # Trained .pkl and .pth model weights
+│   │   └── api/         # FastAPI routers
+│   ├── scripts/         # Model training scripts
+│   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── components/  # Dashboard UI Components
-│   │   └── lib/         # API connection logic (insightsApi.ts)
-│   └── vercel.json      # Proxy configuration
+│   │   ├── components/  # React UI components
+│   │   └── lib/         # API client (insightsApi.ts)
+│   └── index.html
 └── README.md
 ```
 
@@ -95,10 +98,10 @@ farmwise-ai/
 
 ## 👥 Team
 
-- **Swabhiman Paudel**: Project Lead & AI Agent Developer
-- **Prabin B.K.**: Integration Lead & Data Engineer
-- **Pratik Pokharel**: UI/UX Designer & Front-End Developer
-- **Sujal Thapa**: System Architect & Documentation Lead
+- **Swabhiman Paudel** — Project Lead & AI Agent Developer
+- **Prabin B.K.** — Integration Lead & Data Engineer
+- **Pratik Pokharel** — UI/UX Designer & Front-End Developer
+- **Sujal Thapa** — System Architect & Documentation Lead
 
 ---
 
