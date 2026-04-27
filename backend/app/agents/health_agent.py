@@ -187,7 +187,7 @@ def _build_model():
         return _ONNX_SESSION
     except Exception as exc:
         logger.exception("Failed to load ONNX plant model: %s", exc)
-        return None
+        raise RuntimeError(f"InferenceSession load failed: {str(exc)}")
 
 
 def _preprocess(image_bytes: bytes) -> np.ndarray:
