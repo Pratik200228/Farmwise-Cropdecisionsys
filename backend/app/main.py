@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 # (ANTHROPIC_API_KEY / OPENAI_API_KEY) and other secrets are available
 # to all routers via os.getenv(...). Falls back silently if .env is missing.
 _ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
-load_dotenv(dotenv_path=_ENV_PATH, override=False)
+load_dotenv(dotenv_path=_ENV_PATH, override=True)
 
 from app.api.routers import suitability, market, health, advisor  # noqa: E402
 
